@@ -9,6 +9,7 @@ import { starveWindow } from "../systems/Difficulty";
 import { FallingItem } from "../systems/FallingItem";
 import { Hud } from "../ui/Hud";
 import { StarveGauge } from "../ui/StarveGauge";
+import { WeatherFx } from "../ui/WeatherFx";
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -50,7 +51,17 @@ export class GameScene extends Phaser.Scene {
     const user = this.registry.get("user") as GameUser;
     const baseKey = PLAYER_BASES[user.gender].key;
 
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setDepth(-2);
+
+    new WeatherFx(this, {
+      rainDepth: -1,
+      flashDepth: 145,
+      flashMaxAlpha: 0.32,
+      lightningMinMs: 5000,
+      lightningMaxMs: 11000,
+      quantity: 2,
+      frequency: 52,
+    });
 
     const footerTop = gameConfig.footer.top;
     const footer = this.add.graphics().setDepth(1);

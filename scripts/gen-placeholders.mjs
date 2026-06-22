@@ -1,4 +1,4 @@
-// Generates placeholder PNG assets for Calorie Catcher using only Node built-ins.
+// Generates placeholder PNG assets for Hujan Kalori using only Node built-ins.
 // Run: npm run assets  (also runs automatically before dev/build)
 //
 // These are throwaway placeholders. Designers replace them by dropping real

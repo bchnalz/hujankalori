@@ -25,6 +25,6 @@ export class BootScene extends Phaser.Scene {
 
     this.registry.set("user", user);
     this.registry.set("embedded", isEmbedded());
-    this.scene.start("Preload");
+    this.scene.start("Splash");
   }
 }

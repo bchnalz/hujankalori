@@ -1,4 +1,4 @@
-# Calorie Catcher
+# Hujan Kalori
 
 Mobile-first survival/endless **catcher** minigame for **LAPER**. The player moves
 left/right to catch falling **activity** items (restore HP) and avoid **food**

@@ -1,8 +1,8 @@
 {
-  "name": "calorie-catcher",
+  "name": "hujan-kalori",
   "version": "0.1.0",
   "private": true,
-  "description": "Calorie Catcher minigame for LAPER — a mobile-first survival catcher (Phaser 3 + TypeScript + Vite).",
+  "description": "Hujan Kalori minigame for LAPER — a mobile-first survival catcher (Phaser 3 + TypeScript + Vite).",
   "type": "module",
   "scripts": {
     "assets": "node scripts/gen-placeholders.mjs",

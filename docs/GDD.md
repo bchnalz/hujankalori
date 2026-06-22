@@ -1,4 +1,4 @@
-# Calorie Catcher — Game Design Document
+# Hujan Kalori — Game Design Document
 
 ## 1. Overview
 

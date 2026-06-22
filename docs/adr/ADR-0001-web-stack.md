@@ -1,11 +1,11 @@
-# ADR-0001 — Web rendering stack for Calorie Catcher
+# ADR-0001 — Web rendering stack for Hujan Kalori
 
 - **Status:** Accepted
 - **Date:** 2026-06-21
 - **Context story:** GAME-01, GAME-02, GAME-11
 
 ## Context
-Calorie Catcher is a 2D falling-item catcher that must run **smoothly on
+Hujan Kalori is a 2D falling-item catcher that must run **smoothly on
 smartphone browsers**, be **embedded via iframe** in LAPER on a **separate
 Vercel** deployment, and follow an **asset-driven** design (swappable PNGs).
 
