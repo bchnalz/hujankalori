@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+*.local
+.vercel
+
+# Local agent tooling / downloaded skills (not part of the game)
+.opencode/
+
+# Generated placeholder assets (recreate via: npm run assets)
+public/assets/
