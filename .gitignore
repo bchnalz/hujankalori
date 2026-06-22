@@ -7,5 +7,5 @@ dist
 # Local agent tooling / downloaded skills (not part of the game)
 .opencode/
 
-# Generated placeholder assets (recreate via: npm run assets)
-public/assets/
+# Note: public/assets/ IS tracked (real art + placeholders).
+# Missing items get an auto-generated placeholder via: npm run assets

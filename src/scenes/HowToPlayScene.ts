@@ -52,6 +52,14 @@ export class HowToPlayScene extends Phaser.Scene {
 
     this.row(
       y,
+      (cx, cy) => this.drawMiniPie(cx, cy, 54),
+      "Timer lapar: jangan sampai kelaparan. Diet sehat, gabole sampai pingsan!",
+      "wow",
+    );
+    y += step;
+
+    this.row(
+      y,
       (cx, cy) => this.add.image(cx, cy, food.key).setDisplaySize(100, 100),
       "Makanan berat = sisa kalori drop. Jangan kalap ya! Sisa kalori = 0, jagoan kekenyangan = game over.",
       "sad",
@@ -76,14 +84,6 @@ export class HowToPlayScene extends Phaser.Scene {
         this.add.image(cx, cy, activity.key).setDisplaySize(100, 100);
       },
       "Gelembung OLAHRAGA = sisa kalori bertambah! Tangkap biar bisa tahan lebih lama!",
-      "wow",
-    );
-    y += step;
-
-    this.row(
-      y,
-      (cx, cy) => this.drawMiniPie(cx, cy, 54),
-      "Timer lapar: jangan sampai kelaparan. Diet sehat, gabole sampai pingsan!",
       "wow",
     );
     y += step;
