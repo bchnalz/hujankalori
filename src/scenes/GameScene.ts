@@ -10,6 +10,8 @@ import { FallingItem } from "../systems/FallingItem";
 import { Hud } from "../ui/Hud";
 import { StarveGauge } from "../ui/StarveGauge";
 import { WeatherFx } from "../ui/WeatherFx";
+import { addMuteToggle } from "../ui/MuteToggle";
+import { Sfx } from "../audio/Sfx";
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -34,6 +36,9 @@ export class GameScene extends Phaser.Scene {
   private dragPlayerStartX = 0;
   private hungerWarned = false;
   private warnBorder!: Phaser.GameObjects.Graphics;
+  private weather!: WeatherFx;
+  private combo = 0;
+  private nextWarnBeep = 0;
 
   constructor() {
     super("Game");
@@ -47,13 +52,15 @@ export class GameScene extends Phaser.Scene {
     this.intro = true;
     this.introElapsed = 0;
     this.startTime = this.time.now;
+    this.combo = 0;
+    this.nextWarnBeep = 0;
 
     const user = this.registry.get("user") as GameUser;
     const baseKey = PLAYER_BASES[user.gender].key;
 
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setDepth(-2);
 
-    new WeatherFx(this, {
+    this.weather = new WeatherFx(this, {
       rainDepth: -1,
       flashDepth: 145,
       flashMaxAlpha: 0.32,
@@ -61,6 +68,7 @@ export class GameScene extends Phaser.Scene {
       lightningMaxMs: 11000,
       quantity: 2,
       frequency: 52,
+      thunderVolume: 0.35,
     });
 
     const footerTop = gameConfig.footer.top;
@@ -117,6 +125,9 @@ export class GameScene extends Phaser.Scene {
 
     this.hud.update(0, 0);
     this.starve.update(this.starveTimer, this.starveTotal);
+
+    addMuteToggle(this, 60, 150);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => Sfx.stopMusic(0.2));
   }
 
   private handleCatch(item: FallingItem): void {
@@ -126,6 +137,16 @@ export class GameScene extends Phaser.Scene {
     const delta = def.type === "activity" ? def.value : -def.value;
 
     this.applyHp(delta);
+    if (def.type === "food") {
+      this.combo = 0;
+      Sfx.catchBad();
+      this.cameras.main.shake(140, 0.006);
+    } else if (def.type === "activity") {
+      Sfx.catchGood(this.combo);
+      this.combo++;
+    } else {
+      Sfx.catchNeutral();
+    }
     if (def.type !== "activity") {
       const elapsed = (this.time.now - this.startTime) / 1000;
       this.starveTotal = starveWindow(elapsed);
@@ -255,6 +276,10 @@ export class GameScene extends Phaser.Scene {
     this.warnBorder.setVisible(lowHunger);
     if (lowHunger) {
       this.warnBorder.setAlpha(0.3 + 0.4 * Math.abs(Math.sin(time / 110)));
+      if (time >= this.nextWarnBeep) {
+        Sfx.warn();
+        this.nextWarnBeep = time + 500;
+      }
       if (!this.hungerWarned) {
         this.hungerWarned = true;
         if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(140);
@@ -262,6 +287,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.hud.update(this.hp, elapsed);
+    Sfx.setMusicTempo(1 + elapsed / 240);
 
     if (this.hp <= 0) {
       this.endGame(elapsed, "hp");
@@ -284,6 +310,12 @@ export class GameScene extends Phaser.Scene {
       this.countdownText.setText(label);
       this.countdownText.setColor(label === "MULAI!" ? "#7CFC8A" : "#ffffff");
       this.countdownText.setScale(1.8);
+      if (label === "MULAI!") {
+        Sfx.go();
+        this.weather.bigStrike({ x: this.player.x, targetY: gameConfig.player.y - 40, depth: 190 });
+      } else {
+        Sfx.countdownTick();
+      }
       this.tweens.add({ targets: this.countdownText, scale: 1, duration: 280, ease: "Back.easeOut" });
     }
 
@@ -301,11 +333,13 @@ export class GameScene extends Phaser.Scene {
     this.hud.update(this.hp, 0);
     this.warnBorder.setVisible(false);
     this.countdownText.destroy();
+    Sfx.startMusic();
   }
 
   private endGame(elapsed: number, reason: "hp" | "starve"): void {
     this.ended = true;
     this.physics.pause();
+    Sfx.stopMusic(0.3);
     this.time.delayedCall(350, () => {
       this.scene.start("GameOver", { survivalSeconds: elapsed, reason });
     });

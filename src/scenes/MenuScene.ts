@@ -5,6 +5,7 @@ import { PLAYER_BASES } from "../config/playerConfig";
 import type { GameUser } from "../data/types";
 import { makeButton } from "../ui/Button";
 import { addFullscreenToggle } from "../ui/FullscreenToggle";
+import { addMuteToggle } from "../ui/MuteToggle";
 import { WeatherFx } from "../ui/WeatherFx";
 import { startAmbientItems } from "../ui/ambientItems";
 
@@ -55,9 +56,13 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    makeButton(this, GAME_WIDTH / 2, 960, "MAIN", () => this.scene.start("HowToPlay"));
+    makeButton(this, GAME_WIDTH / 2, 940, "MAIN", () => this.scene.start("HowToPlay"));
+    makeButton(this, GAME_WIDTH / 2, 1070, "PERINGKAT", () => this.scene.start("Leaderboard"), {
+      color: 0x37406b,
+    });
 
     addFullscreenToggle(this, GAME_WIDTH - 56, 56);
+    addMuteToggle(this, 56, 56);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 60, "Mode demo \u2014 data & token belum terhubung", {
