@@ -1,10 +1,15 @@
 /**
  * Client for the public leaderboard (`/api/leaderboard`, Vercel KV).
- * No login: players sign scores with 4-letter arcade initials.
+ * No login: players sign scores with 4-letter arcade initials; each initials
+ * keeps its best score on three boards — today, this week (WIB) and all time.
  *
- * If the API isn't reachable (local `vite` dev, KV not connected yet, offline)
- * it falls back to a per-device local board so the flow still works.
+ * If the API isn't reachable (local `vite` dev, KV not connected, offline) it
+ * falls back to a per-device local board so the flow still works.
  */
+
+export type Period = "day" | "week" | "all";
+export const PERIODS: Period[] = ["day", "week", "all"];
+export const PERIOD_LABEL: Record<Period, string> = { day: "Hari Ini", week: "Minggu Ini", all: "Semua" };
 
 export interface LeaderboardEntry {
   rank: number;
@@ -13,22 +18,34 @@ export interface LeaderboardEntry {
   id: string;
 }
 
+export interface Standing {
+  rank: number | null;
+  total: number;
+  best: number | null;
+  entries: LeaderboardEntry[];
+}
+
 export interface BoardResult {
   entries: LeaderboardEntry[];
+  total: number;
+  me: { rank: number; score: number } | null;
   online: boolean;
 }
 
-export interface SubmitResult extends BoardResult {
+export interface SubmitResult {
   ok: boolean;
-  id?: string;
-  rank?: number;
+  online: boolean;
   error?: string;
+  improved?: boolean;
+  previousBest?: number | null;
+  periods?: Record<Period, Standing>;
 }
 
 const API = `${(import.meta.env.VITE_API_BASE as string | undefined) ?? ""}/api/leaderboard`;
 const INITIALS_KEY = "hk_initials";
-const LOCAL_KEY = "hk_local_lb";
+const LOCAL_KEY = "hk_local_runs";
 const BEST_KEY = "hk_best";
+const WIB_OFFSET_MS = 7 * 3600 * 1000;
 
 // Mirror of the server blocklist so the player gets instant feedback.
 const BLOCKED = new Set([
@@ -67,6 +84,8 @@ export function recordPersonalBest(seconds: number): { best: number; isNew: bool
   return { best: Math.max(prev, seconds), isNew };
 }
 
+type ApiError = Error & { code?: string; status?: number };
+
 async function api<T>(init?: RequestInit, query = ""): Promise<T> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), 6000);
@@ -82,58 +101,116 @@ async function api<T>(init?: RequestInit, query = ""): Promise<T> {
   }
 }
 
+/** A real answer from our server (vs. network / not deployed / not configured). */
+function isServerAnswer(e: unknown): boolean {
+  const err = e as ApiError;
+  return !!err.status && err.status !== 503;
+}
+
 // ------------------------------------------------------------ local fallback
 
-function readLocal(): LeaderboardEntry[] {
+interface LocalRun {
+  name: string;
+  score: number;
+  at: number;
+}
+
+function readRuns(): LocalRun[] {
   try {
-    const arr = JSON.parse(store()?.getItem(LOCAL_KEY) ?? "[]") as LeaderboardEntry[];
+    const arr = JSON.parse(store()?.getItem(LOCAL_KEY) ?? "[]") as LocalRun[];
     return Array.isArray(arr) ? arr : [];
   } catch {
     return [];
   }
 }
 
-function writeLocal(entries: LeaderboardEntry[]): void {
-  store()?.setItem(LOCAL_KEY, JSON.stringify(entries.slice(0, 50)));
+function periodStart(period: Period, now = Date.now()): number {
+  if (period === "all") return 0;
+  const d = new Date(now + WIB_OFFSET_MS);
+  const midnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - WIB_OFFSET_MS;
+  if (period === "day") return midnight;
+  const dow = d.getUTCDay() || 7; // Monday = 1
+  return midnight - (dow - 1) * 86400000;
 }
 
-function ranked(entries: LeaderboardEntry[]): LeaderboardEntry[] {
-  return entries
-    .sort((a, b) => b.score - a.score)
-    .map((e, i) => ({ ...e, rank: i + 1 }));
+function localStanding(period: Period, name?: string, limit = 10): Standing {
+  const from = periodStart(period);
+  const best = new Map<string, number>();
+  for (const r of readRuns()) {
+    if (r.at < from) continue;
+    best.set(r.name, Math.max(best.get(r.name) ?? 0, r.score));
+  }
+  const all = [...best.entries()]
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([n, s], i) => ({ rank: i + 1, name: n, score: s, id: n }));
+  const mine = name ? all.find((e) => e.name === name) : undefined;
+  return { rank: mine?.rank ?? null, total: all.length, best: mine?.score ?? null, entries: all.slice(0, limit) };
+}
+
+function saveLocalRun(name: string, score: number): void {
+  const runs = [...readRuns(), { name, score, at: Date.now() }].slice(-300);
+  store()?.setItem(LOCAL_KEY, JSON.stringify(runs));
 }
 
 // ------------------------------------------------------------------- public
 
-export async function fetchTop(limit = 20): Promise<BoardResult> {
+/** Ask the server to open a run session. Null when offline/unavailable. */
+export async function startRun(): Promise<string | null> {
   try {
-    const { entries } = await api<{ entries: LeaderboardEntry[] }>(undefined, `?limit=${limit}`);
-    return { entries, online: true };
+    const { sid } = await api<{ sid: string }>({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "start" }),
+    });
+    return sid ?? null;
   } catch {
-    return { entries: ranked(readLocal()).slice(0, limit), online: false };
+    return null;
   }
 }
 
-export async function submitScore(name: string, seconds: number): Promise<SubmitResult> {
+export async function fetchBoard(period: Period, limit = 15, name = getSavedInitials()): Promise<BoardResult> {
+  const nameQ = /^[A-Z]{4}$/.test(name) ? `&name=${name}` : "";
+  try {
+    const r = await api<{ entries: LeaderboardEntry[]; total: number; me: { rank: number; score: number } | null }>(
+      undefined,
+      `?period=${period}&limit=${limit}${nameQ}`,
+    );
+    return { ...r, online: true };
+  } catch {
+    const s = localStanding(period, name, limit);
+    return {
+      entries: s.entries,
+      total: s.total,
+      me: s.rank && s.best !== null ? { rank: s.rank, score: s.best } : null,
+      online: false,
+    };
+  }
+}
+
+export async function submitScore(name: string, seconds: number, sid: string | null): Promise<SubmitResult> {
   const score = Math.round(seconds * 100) / 100;
   saveInitials(name);
-  try {
-    const r = await api<{ id: string; rank: number; entries: LeaderboardEntry[] }>({
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, score }),
-    });
-    return { ok: true, online: true, ...r };
-  } catch (e) {
-    const err = e as Error & { code?: string; status?: number };
-    // A real server answer (bad name, rate limit…) — don't silently save locally.
-    if (err.status && err.status !== 503) {
-      return { ok: false, online: true, entries: [], error: err.code ?? err.message };
+
+  if (sid) {
+    try {
+      const r = await api<{ improved: boolean; previousBest: number | null; periods: Record<Period, Standing> }>({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, score, sid }),
+      });
+      return { ok: true, online: true, ...r };
+    } catch (e) {
+      if (isServerAnswer(e)) {
+        const err = e as ApiError;
+        return { ok: false, online: true, error: err.code ?? err.message };
+      }
+      // fall through to local
     }
-    const id = Math.random().toString(36).slice(2, 10);
-    const all = ranked([...readLocal(), { rank: 0, name, score, id }]);
-    writeLocal(all);
-    const mine = all.find((x) => x.id === id);
-    return { ok: true, online: false, id, rank: mine?.rank, entries: all.slice(0, 10) };
   }
+
+  const prev = localStanding("all", name).best;
+  saveLocalRun(name, score);
+  const periods = {} as Record<Period, Standing>;
+  for (const p of PERIODS) periods[p] = localStanding(p, name);
+  return { ok: true, online: false, improved: prev === null || score > prev, previousBest: prev, periods };
 }

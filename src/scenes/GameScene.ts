@@ -12,6 +12,8 @@ import { StarveGauge } from "../ui/StarveGauge";
 import { WeatherFx } from "../ui/WeatherFx";
 import { addMuteToggle } from "../ui/MuteToggle";
 import { Sfx } from "../audio/Sfx";
+import { makeButton } from "../ui/Button";
+import { startRun } from "../data/leaderboard";
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -24,8 +26,12 @@ export class GameScene extends Phaser.Scene {
   private hp: number = gameConfig.startHp;
   private starveTimer = 0;
   private starveTotal = 0;
-  private startTime = 0;
+  /** Survival time, accumulated from frame deltas — never wall-clock time. */
+  private elapsed = 0;
   private ended = false;
+  private paused = false;
+  private pauseUi?: Phaser.GameObjects.Container;
+  private runSid: Promise<string | null> = Promise.resolve(null);
 
   private intro = true;
   private introElapsed = 0;
@@ -51,7 +57,12 @@ export class GameScene extends Phaser.Scene {
     this.ended = false;
     this.intro = true;
     this.introElapsed = 0;
-    this.startTime = this.time.now;
+    this.elapsed = 0;
+    this.paused = false;
+    this.pauseUi = undefined;
+    this.time.paused = false; // the clock persists across restarts (e.g. quit from pause)
+    this.tweens.resumeAll();
+    this.runSid = Promise.resolve(null);
     this.combo = 0;
     this.nextWarnBeep = 0;
 
@@ -132,7 +143,20 @@ export class GameScene extends Phaser.Scene {
     this.starve.update(this.starveTimer, this.starveTotal);
 
     addMuteToggle(this, 60, 150);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => Sfx.stopMusic(0.2));
+    this.addPauseButton(60, 236);
+
+    // Leaving the app/tab pauses the run so no time is gained while away.
+    const onHidden = (): void => this.pauseGame();
+    const onVis = (): void => {
+      if (document.hidden) this.pauseGame();
+    };
+    this.game.events.on(Phaser.Core.Events.HIDDEN, onHidden);
+    document.addEventListener("visibilitychange", onVis);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      Sfx.stopMusic(0.2);
+      this.game.events.off(Phaser.Core.Events.HIDDEN, onHidden);
+      document.removeEventListener("visibilitychange", onVis);
+    });
   }
 
   private handleCatch(item: FallingItem): void {
@@ -153,8 +177,7 @@ export class GameScene extends Phaser.Scene {
       Sfx.catchNeutral();
     }
     if (def.type !== "activity") {
-      const elapsed = (this.time.now - this.startTime) / 1000;
-      this.starveTotal = starveWindow(elapsed);
+      this.starveTotal = starveWindow(this.elapsed);
       this.starveTimer = this.starveTotal;
       this.hungerWarned = false;
     }
@@ -244,15 +267,19 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  update(time: number, delta: number): void {
-    if (this.ended) return;
+  update(time: number, rawDelta: number): void {
+    if (this.ended || this.paused) return;
+
+    // Clamp so a long frame (e.g. returning from background) can't add time.
+    const delta = Math.min(rawDelta, 100);
 
     if (this.intro) {
       this.updateIntro(delta);
       return;
     }
 
-    const elapsed = (time - this.startTime) / 1000;
+    this.elapsed += delta / 1000;
+    const elapsed = this.elapsed;
 
     if (this.cursors.left?.isDown) this.player.nudge(-12);
     if (this.cursors.right?.isDown) this.player.nudge(12);
@@ -325,14 +352,16 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: this.countdownText, scale: 1, duration: 280, ease: "Back.easeOut" });
     }
 
-    if (this.introElapsed >= cfg.countMs + cfg.goMs) this.startPlay(this.time.now);
+    if (this.introElapsed >= cfg.countMs + cfg.goMs) this.startPlay();
   }
 
-  private startPlay(time: number): void {
+  private startPlay(): void {
     this.intro = false;
     this.dragging = false;
     this.hungerWarned = false;
-    this.startTime = time;
+    this.elapsed = 0;
+    // Server-side run session: the board rejects scores longer than real time.
+    this.runSid = startRun();
     this.hp = gameConfig.startHp;
     this.starveTotal = starveWindow(0);
     this.starveTimer = this.starveTotal;
@@ -342,12 +371,72 @@ export class GameScene extends Phaser.Scene {
     Sfx.playMusic("game");
   }
 
+  private addPauseButton(x: number, y: number): void {
+    const S = 72;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x000000, 0.4).fillRoundedRect(-S / 2, -S / 2, S, S, 14);
+    bg.fillStyle(0xffffff, 1).fillRect(-14, -18, 9, 36).fillRect(5, -18, 9, 36);
+    const btn = this.add.container(x, y, [bg]).setSize(S, S).setDepth(300);
+    btn.setInteractive({ useHandCursor: true });
+    btn.on("pointerup", () => {
+      Sfx.click();
+      this.pauseGame();
+    });
+  }
+
+  private pauseGame(): void {
+    if (this.paused || this.ended) return;
+    this.paused = true;
+    this.dragging = false;
+    this.physics.pause();
+    this.tweens.pauseAll();
+    this.time.paused = true;
+    Sfx.stopMusic(0.1);
+
+    const shade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.62);
+    shade.setInteractive(); // swallow taps behind the overlay
+    const title = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.36, "JEDA", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "96px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    const note = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.36 + 86, "Waktu berhenti saat game dijeda.", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "26px",
+        color: "#cfd8e6",
+      })
+      .setOrigin(0.5);
+    const resume = makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, "LANJUT", () => this.resumeGame(), {
+      width: 340,
+    });
+    const quit = makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55 + 130, "MENU", () => this.scene.start("Menu"), {
+      width: 340,
+      color: 0x37406b,
+    });
+    this.pauseUi = this.add.container(0, 0, [shade, title, note, resume, quit]).setDepth(500);
+  }
+
+  private resumeGame(): void {
+    if (!this.paused) return;
+    this.pauseUi?.destroy();
+    this.pauseUi = undefined;
+    this.paused = false;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.physics.resume();
+    if (!this.intro) Sfx.playMusic("game");
+  }
+
   private endGame(elapsed: number, reason: "hp" | "starve"): void {
     this.ended = true;
     this.physics.pause();
     Sfx.stopMusic(0.3);
     this.time.delayedCall(350, () => {
-      this.scene.start("GameOver", { survivalSeconds: elapsed, reason });
+      this.scene.start("GameOver", { survivalSeconds: elapsed, reason, sid: this.runSid });
     });
   }
 }
