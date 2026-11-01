@@ -52,13 +52,17 @@ const KV_URL = env.KV_REST_API_URL ?? env.UPSTASH_REDIS_REST_URL;
 const KV_TOKEN = env.KV_REST_API_TOKEN ?? env.UPSTASH_REDIS_REST_TOKEN;
 
 const MAX_SCORE_SEC = 3600;
-const SUBMIT_LIMIT = 6; // submissions per IP per minute
-const START_LIMIT = 30; // runs started per IP per minute
+// Generous per-IP limits: colleagues on the same office Wi-Fi share one public IP.
+const SUBMIT_LIMIT = 40; // submissions per IP per minute
+const START_LIMIT = 80; // runs started per IP per minute
 const SESSION_TTL = 2 * 60 * 60; // seconds
 const TOLERANCE_SEC = 3; // network latency between client start and server start
 const KEEP_ALL = 10000;
 const TTL = { day: 3 * 86400, week: 21 * 86400 };
 const WIB_OFFSET_MS = 7 * 3600 * 1000;
+const BANNED_KEY = "hk:banned";
+const LOG_KEY = "hk:log";
+const LOG_KEEP = 500;
 
 // Initials that are not allowed on the public board (ID + EN).
 const BLOCKED = new Set([
@@ -117,6 +121,12 @@ function newSessionId(): string {
   if (c) c.getRandomValues(bytes);
   else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
   return [...bytes].map((x) => x.toString(36).padStart(2, "0")).join("").slice(0, 20);
+}
+
+function maskIp(ip: string): string {
+  if (ip.includes(".")) return ip.split(".").slice(0, 3).join(".") + ".x";
+  if (ip.includes(":")) return ip.split(":").slice(0, 3).join(":") + ":x";
+  return "?";
 }
 
 function clientIp(req: Req): string {
@@ -235,8 +245,15 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         return;
       }
 
-      // Session is single-use.
-      const [started] = await kv([["GETDEL", `hk:s:${sid}`]]);
+      // Session is single-use. Banned initials (set from the admin panel) are refused.
+      const [banned, started] = await kv([
+        ["SISMEMBER", BANNED_KEY, name],
+        ["GETDEL", `hk:s:${sid}`],
+      ]);
+      if (Number(banned) === 1) {
+        res.status(400).json({ error: "blocked_name" });
+        return;
+      }
       if (started === null || started === undefined) {
         res.status(400).json({ error: "invalid_session" });
         return;
@@ -268,6 +285,9 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         );
       }
       cmds.push(["ZREMRANGEBYRANK", keys.all, 0, -(KEEP_ALL + 1)]);
+      // Recent-submissions log for the admin panel (IP masked to /24).
+      const log = JSON.stringify({ n: name, s: score, t: now, r: Math.round(realSec * 10) / 10, ip: maskIp(ip) });
+      cmds.push(["LPUSH", LOG_KEY, log], ["LTRIM", LOG_KEY, 0, LOG_KEEP - 1]);
       const out = await kv(cmds);
 
       const periods = {} as Record<Period, Standing>;

@@ -65,11 +65,25 @@ Anti-cheat:
 - Every run needs a single-use server session; a score longer than the real
   time since that session started (+3 s) is rejected (`score_mismatch`).
 - `^[A-Z]{4}$` initials, offensive-initials blocklist, score range 1–3600 s,
-  6 submissions and 30 run starts per IP per minute.
+  40 submissions and 80 run starts per IP per minute (generous, since a whole
+  office on one Wi-Fi shares a single public IP).
 
 Redis keys: `hk:v2:all`, `hk:v2:w:<YYYY-Www>` (21-day TTL),
 `hk:v2:d:<YYYY-MM-DD>` (3-day TTL), `hk:s:<sid>` (2-hour TTL). Scores from the
 first version (`hk:lb`) are migrated into the all-time board automatically.
+
+### Admin panel
+Open **`/admin`** (not linked from the game; `noindex`). It is protected by the
+**`ADMIN_PASSWORD`** environment variable (at least 8 characters) — add it in
+Vercel → Settings → Environment Variables and redeploy. From the panel you can:
+- browse the Hari Ini / Minggu Ini / Semua boards and search initials,
+- **delete** an initials from one board or from all boards,
+- **block** initials (removed everywhere; future submissions refused) and unblock,
+- review the last submissions with the real session duration — runs whose score
+  is almost the whole session (no time spent typing initials) are tagged **cek**.
+
+Ten wrong passwords from one IP lock the panel for 15 minutes. API:
+`api/admin.ts` (`x-admin-key` header).
 
 ### Connecting Vercel KV
 1. In the Vercel project: **Storage → Create Database → Upstash for Redis**
