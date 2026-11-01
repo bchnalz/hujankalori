@@ -11,6 +11,95 @@ const MUTE_KEY = "hk_muted";
 
 type Wave = OscillatorType;
 
+export type TrackName = "menu" | "game";
+
+interface Track {
+  name: TrackName;
+  /** seconds per 8th-note step */
+  step: number;
+  volume: number;
+  /** one chord (MIDI notes, root first) per bar of 8 steps */
+  chords: number[][];
+  /** MIDI note per step; 0 = hold/rest */
+  melody: number[];
+  arp: number[];
+  leadWave: Wave;
+  leadVol: number;
+  arpVol: number;
+  bassVol: number;
+  bassSteps: number[];
+  bassOctaveJump: boolean;
+  kick: number[];
+  snare: number[];
+  hat: number[];
+}
+
+/* Two original chiptune loops (8 bars each). */
+const TRACKS: Record<TrackName, Track> = {
+  // "Rintik" — relaxed C-major loop for menus, sits under the rain.
+  menu: {
+    name: "menu",
+    step: 0.21,
+    volume: 0.2,
+    chords: [
+      [48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50],
+      [48, 52, 55], [45, 48, 52], [50, 53, 57], [43, 47, 50],
+    ],
+    // prettier-ignore
+    melody: [
+      72, 0, 76, 0, 79, 0, 76, 0,
+      76, 0, 72, 0, 69, 0, 72, 74,
+      77, 0, 76, 0, 72, 0, 69, 0,
+      71, 0, 74, 0, 79, 0, 0, 0,
+      72, 0, 76, 79, 84, 0, 79, 0,
+      81, 0, 79, 0, 76, 0, 72, 0,
+      74, 0, 77, 0, 81, 0, 77, 74,
+      79, 0, 0, 0, 71, 0, 74, 0,
+    ],
+    arp: [0, 1, 2, 1, 0, 1, 2, 1],
+    leadWave: "triangle",
+    leadVol: 0.2,
+    arpVol: 0.035,
+    bassVol: 0.2,
+    bassSteps: [0, 4],
+    bassOctaveJump: false,
+    kick: [0],
+    snare: [],
+    hat: [4],
+  },
+  // "Kejar Kalori" — driving A-minor loop for gameplay.
+  game: {
+    name: "game",
+    step: 0.145,
+    volume: 0.22,
+    chords: [
+      [57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62],
+      [57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 56, 59],
+    ],
+    // prettier-ignore
+    melody: [
+      81, 0, 79, 81, 84, 0, 81, 0,
+      77, 0, 76, 77, 81, 0, 77, 0,
+      76, 0, 74, 76, 79, 0, 76, 74,
+      74, 0, 71, 0, 67, 0, 71, 74,
+      76, 77, 76, 74, 72, 0, 69, 0,
+      72, 74, 72, 71, 69, 0, 65, 0,
+      67, 71, 74, 79, 77, 0, 74, 0,
+      76, 0, 75, 0, 76, 0, 0, 0,
+    ],
+    arp: [0, 1, 2, 1, 0, 2, 1, 2],
+    leadWave: "square",
+    leadVol: 0.085,
+    arpVol: 0.04,
+    bassVol: 0.24,
+    bassSteps: [0, 1, 2, 3, 4, 5, 6, 7],
+    bassOctaveJump: true,
+    kick: [0, 4],
+    snare: [2, 6],
+    hat: [1, 3, 5, 7],
+  },
+};
+
 class SfxEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -18,10 +107,12 @@ class SfxEngine {
   private musicBus: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private muted = false;
+  private unlockedAt = 0;
 
-  private rainNode: AudioBufferSourceNode | null = null;
   private rainGain: GainNode | null = null;
 
+  private rainLfoDepth: GainNode | null = null;
+  private track: Track | null = null;
   private musicTimer: number | null = null;
   private musicStep = 0;
   private musicNextTime = 0;
@@ -78,7 +169,22 @@ class SfxEngine {
       const data = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     }
-    if (this.ctx.state !== "running") void this.ctx.resume();
+    if (this.ctx.state !== "running") {
+      this.unlockedAt = performance.now();
+      void this.ctx.resume().then(() => this.flushPending());
+    }
+  }
+
+  private pendingMusic: TrackName | null = null;
+  private pendingRain: number | null = null;
+
+  private flushPending(): void {
+    if (this.pendingRain !== null) this.setRainLevel(this.pendingRain);
+    if (this.pendingMusic) {
+      const t = this.pendingMusic;
+      this.pendingMusic = null;
+      this.playMusic(t);
+    }
   }
 
   setMuted(m: boolean): void {
@@ -100,8 +206,15 @@ class SfxEngine {
 
   // ---------------------------------------------------------------- primitives
 
+  /**
+   * True when sounds can be scheduled. Right after `unlock()` the context may
+   * still be resuming; sounds scheduled then play as soon as it resumes, so we
+   * accept "suspended" for a short grace window (fixes the silent first thunder).
+   */
   private ready(): boolean {
-    return !!(this.ctx && this.sfxBus && this.ctx.state === "running");
+    if (!this.ctx || !this.sfxBus) return false;
+    if (this.ctx.state === "running") return true;
+    return this.ctx.state === "suspended" && performance.now() - this.unlockedAt < 1500;
   }
 
   private tone(
@@ -251,109 +364,163 @@ class SfxEngine {
 
   // --------------------------------------------------------------- ambience
 
-  /** Continuous soft rain hiss (idempotent). */
-  startRain(level = 0.08): void {
-    if (!this.ready()) return;
+  /**
+   * Soft rain bed: band-limited noise (no harsh hiss) with a slow random
+   * "gust" swell. `level` ~0.05 for menus, ~0.02 under gameplay music.
+   */
+  setRainLevel(level: number): void {
+    if (!this.ready()) {
+      this.pendingRain = level;
+      return;
+    }
+    this.pendingRain = null;
     const ctx = this.ctx!;
-    if (!this.rainNode) {
+    if (!this.rainGain) {
       const src = ctx.createBufferSource();
       src.buffer = this.noiseBuf;
       src.loop = true;
       const hp = ctx.createBiquadFilter();
       hp.type = "highpass";
-      hp.frequency.value = 900;
+      hp.frequency.value = 350;
       const lp = ctx.createBiquadFilter();
       lp.type = "lowpass";
-      lp.frequency.value = 6500;
+      lp.frequency.value = 2200;
+      lp.Q.value = 0.3;
       const g = ctx.createGain();
       g.gain.value = 0.0001;
       src.connect(hp).connect(lp).connect(g).connect(this.sfxBus!);
       src.start();
-      this.rainNode = src;
+
+      // Gusts: a very slow LFO nudges both loudness and brightness.
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.07;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 0;
+      lfo.connect(lfoGain).connect(g.gain);
+      const lfo2 = ctx.createOscillator();
+      lfo2.frequency.value = 0.045;
+      const lfo2Gain = ctx.createGain();
+      lfo2Gain.gain.value = 500;
+      lfo2.connect(lfo2Gain).connect(lp.frequency);
+      lfo.start();
+      lfo2.start();
+
       this.rainGain = g;
+      this.rainLfoDepth = lfoGain;
     }
-    this.rainGain!.gain.setTargetAtTime(level, ctx.currentTime, 0.4);
+    const t = ctx.currentTime;
+    this.rainGain.gain.setTargetAtTime(level, t, 0.6);
+    this.rainLfoDepth!.gain.setTargetAtTime(level * 0.45, t, 0.6);
+  }
+
+  /** @deprecated kept for older call sites; same as setRainLevel. */
+  startRain(level = 0.05): void {
+    this.setRainLevel(level);
   }
 
   // ------------------------------------------------------------------- music
 
-  /** Light chiptune loop for gameplay. `tempo` 1 = normal; rises with difficulty. */
-  startMusic(): void {
-    if (!this.ready() || this.musicTimer !== null) return;
+  /** Start a looping 8-bit track (no-op if it's already playing). */
+  playMusic(name: TrackName): void {
+    if (!this.ready()) {
+      this.pendingMusic = name;
+      return;
+    }
+    if (this.musicTimer !== null && this.track?.name === name) return;
+    this.stopMusic(0.05);
+    const ctx = this.ctx!;
+    this.track = TRACKS[name];
     this.musicStep = 0;
     this.musicTempo = 1;
-    this.musicNextTime = this.ctx!.currentTime + 0.1;
-    this.musicBus!.gain.cancelScheduledValues(this.ctx!.currentTime);
-    this.musicBus!.gain.setTargetAtTime(0.22, this.ctx!.currentTime, 0.2);
+    this.musicNextTime = ctx.currentTime + 0.12;
+    this.musicBus!.gain.cancelScheduledValues(ctx.currentTime);
+    this.musicBus!.gain.setValueAtTime(0.0001, ctx.currentTime);
+    this.musicBus!.gain.setTargetAtTime(this.track.volume, ctx.currentTime + 0.05, 0.25);
     this.musicTimer = window.setInterval(() => this.scheduleMusic(), 50);
   }
 
+  /** @deprecated use playMusic("game"). */
+  startMusic(): void {
+    this.playMusic("game");
+  }
+
   setMusicTempo(t: number): void {
-    this.musicTempo = Math.max(1, Math.min(1.5, t));
+    this.musicTempo = Math.max(1, Math.min(1.45, t));
   }
 
   stopMusic(fade = 0.4): void {
+    this.pendingMusic = null;
     if (this.musicTimer !== null) {
       window.clearInterval(this.musicTimer);
       this.musicTimer = null;
     }
+    this.track = null;
     if (this.ctx && this.musicBus) {
-      this.musicBus.gain.setTargetAtTime(0.0001, this.ctx.currentTime, fade / 3);
+      this.musicBus.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.musicBus.gain.setTargetAtTime(0.0001, this.ctx.currentTime, Math.max(0.01, fade / 3));
     }
   }
 
   private scheduleMusic(): void {
-    if (!this.ctx || this.ctx.state !== "running") return;
-    // Am – F – C – G, 8th notes.
-    const chords = [
-      [57, 60, 64],
-      [53, 57, 60],
-      [48, 52, 55],
-      [55, 59, 62],
-    ];
-    const arp = [0, 1, 2, 1, 0, 2, 1, 2];
-    const stepDur = 0.15 / this.musicTempo;
+    const ctx = this.ctx;
+    const tr = this.track;
+    if (!ctx || !tr || ctx.state !== "running") return;
+    const bus = this.musicBus!;
     const midi = (n: number): number => 440 * Math.pow(2, (n - 69) / 12);
+    const stepDur = tr.step / this.musicTempo;
+    const loop = tr.chords.length * 8;
 
-    while (this.musicNextTime < this.ctx.currentTime + 0.25) {
+    while (this.musicNextTime < ctx.currentTime + 0.25) {
       const t = this.musicNextTime;
-      const bar = Math.floor(this.musicStep / 8) % chords.length;
-      const s = this.musicStep % 8;
-      const chord = chords[bar];
+      const i = this.musicStep % loop;
+      const bar = Math.floor(i / 8);
+      const s = i % 8;
+      const chord = tr.chords[bar];
 
-      this.tone(midi(chord[arp[s]] + 12), t, stepDur * 0.9, {
-        type: "square",
-        vol: 0.09,
-        bus: this.musicBus!,
-      });
-      if (s % 2 === 0) {
-        this.tone(midi(chord[0] - 12), t, stepDur * 1.8, {
-          type: "triangle",
-          vol: 0.22,
-          bus: this.musicBus!,
+      // lead melody
+      const note = tr.melody[i];
+      if (note > 0) {
+        let len = 1;
+        while (len < 4 && tr.melody[(i + len) % loop] === 0) len++;
+        this.tone(midi(note), t, stepDur * len * 0.92, {
+          type: tr.leadWave,
+          vol: tr.leadVol,
+          attack: 0.008,
+          bus,
         });
       }
-      if (s === 0 || s === 4) {
-        // soft kick
-        this.tone(120, t, 0.12, { type: "sine", vol: 0.25, to: 45, bus: this.musicBus! });
-      } else if (s === 2 || s === 6) {
-        // hat
-        const src = this.ctx.createBufferSource();
-        src.buffer = this.noiseBuf;
-        const f = this.ctx.createBiquadFilter();
-        f.type = "highpass";
-        f.frequency.value = 7000;
-        const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.08, t);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-        src.connect(f).connect(g).connect(this.musicBus!);
-        src.start(t, Math.random());
-        src.stop(t + 0.06);
+      // arpeggio
+      if (tr.arpVol > 0) {
+        this.tone(midi(chord[tr.arp[s]] + 12), t, stepDur * 0.8, { type: "square", vol: tr.arpVol, bus });
       }
+      // bass
+      if (tr.bassSteps.includes(s)) {
+        const oct = tr.bassOctaveJump && s % 2 === 1 ? 12 : 0;
+        this.tone(midi(chord[0] - 12 + oct), t, stepDur * 1.6, { type: "triangle", vol: tr.bassVol, bus });
+      }
+      // drums
+      if (tr.kick.includes(s)) this.tone(130, t, 0.13, { type: "sine", vol: 0.3, to: 42, bus });
+      if (tr.snare.includes(s)) this.drumNoise(t, 0.11, 1800, 0.12, "bandpass");
+      if (tr.hat.includes(s)) this.drumNoise(t, 0.04, 7500, 0.05, "highpass");
 
       this.musicStep++;
       this.musicNextTime += stepDur;
     }
+  }
+
+  private drumNoise(t: number, dur: number, freq: number, vol: number, type: BiquadFilterType): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(this.musicBus!);
+    src.start(t, Math.random());
+    src.stop(t + dur + 0.02);
   }
 }
 

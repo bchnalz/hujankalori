@@ -32,7 +32,8 @@ export class StartScene extends Phaser.Scene {
       lightningMaxMs: 5000,
       quantity: 2,
       frequency: 40,
-      thunderVolume: 0.35,
+      thunderVolume: 0.6,
+      rainVolume: 0.05,
     });
 
     const logo = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT * 0.34, UI.logo.key).setOrigin(0.5).setDepth(10);
@@ -89,11 +90,11 @@ export class StartScene extends Phaser.Scene {
       if (this.started) return;
       this.started = true;
       Sfx.unlock();
-      Sfx.startRain(0.07);
+      Sfx.setRainLevel(0.05);
       Sfx.click();
       this.tweens.killTweensOf(btn);
       this.tweens.add({ targets: [btn, label, hint, ring], alpha: 0, scale: 0.85, duration: 220 });
-      weather.bigStrike({ x: GAME_WIDTH / 2, targetY: btnY, depth: 30 });
+      weather.bigStrike({ x: GAME_WIDTH / 2, targetY: btnY, depth: 30, power: 1 });
       this.time.delayedCall(700, () => this.cameras.main.fadeOut(400, 0, 0, 0));
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start("Splash"));
     };

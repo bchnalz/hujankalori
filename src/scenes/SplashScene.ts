@@ -40,11 +40,11 @@ export class SplashScene extends Phaser.Scene {
       rainDepth: 0,
       flashDepth: 20,
       flashMaxAlpha: 0.6,
-      lightningMinMs: 500,
-      lightningMaxMs: 1100,
+      lightningMinMs: 800,
+      lightningMaxMs: 1400,
       quantity: 3,
       frequency: 35,
-      thunderVolume: 0.18,
+      thunderVolume: 0.55,
     });
 
     startAmbientItems(this, { depth: 5 });

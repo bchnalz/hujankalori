@@ -6,6 +6,7 @@ import { makeButton } from "../ui/Button";
 import { addMuteToggle } from "../ui/MuteToggle";
 import { renderLeaderboard } from "../ui/LeaderboardPanel";
 import { WeatherFx } from "../ui/WeatherFx";
+import { Sfx } from "../audio/Sfx";
 
 /** Public Top-15 board, opened from the menu. */
 export class LeaderboardScene extends Phaser.Scene {
@@ -22,8 +23,10 @@ export class LeaderboardScene extends Phaser.Scene {
       flashMaxAlpha: 0.3,
       lightningMinMs: 5000,
       lightningMaxMs: 10000,
-      thunderVolume: 0.3,
+      thunderVolume: 0.6,
+      rainVolume: 0.05,
     });
+    Sfx.playMusic("menu");
     this.add.graphics().fillStyle(0x000000, 0.45).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     addMuteToggle(this, 56, 56);
 
