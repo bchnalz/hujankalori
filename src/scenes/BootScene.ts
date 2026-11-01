@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { DummyDataProvider } from "../data/DummyDataProvider";
 import { isEmbedded, parseUserFromToken, readLaperToken } from "../data/laperBridge";
 import type { GameUser } from "../data/types";
+import { getSavedGender } from "../data/prefs";
 
 /**
  * Resolves the player identity up front, then hands off to Preload.
@@ -22,6 +23,9 @@ export class BootScene extends Phaser.Scene {
     if (!user) {
       user = await new DummyDataProvider().getUser();
     }
+
+    const saved = getSavedGender();
+    if (saved) user = { ...user, gender: saved };
 
     this.registry.set("user", user);
     this.registry.set("embedded", isEmbedded());

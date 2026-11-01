@@ -2,20 +2,30 @@ import Phaser from "phaser";
 import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
 import { BACKGROUND, UI } from "../config/assetManifest";
 import { PLAYER_BASES } from "../config/playerConfig";
-import type { GameUser } from "../data/types";
+import type { GameUser, Gender } from "../data/types";
+import { isTutorialDone, saveGender } from "../data/prefs";
+import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { addFullscreenToggle } from "../ui/FullscreenToggle";
 import { addMuteToggle } from "../ui/MuteToggle";
 import { WeatherFx } from "../ui/WeatherFx";
 import { startAmbientItems } from "../ui/ambientItems";
 
+const CARD_W = 220;
+const CARD_H = 250;
+const CARD_Y = 640;
+
 export class MenuScene extends Phaser.Scene {
+  private cards: Partial<Record<Gender, { box: Phaser.GameObjects.Graphics; sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; x: number }>> = {};
+
   constructor() {
     super("Menu");
   }
 
   create(): void {
     this.cameras.main.fadeIn(400, 0, 0, 0);
+    this.cards = {};
+    Sfx.playMusic("menu");
 
     const user = this.registry.get("user") as GameUser;
 
@@ -25,51 +35,114 @@ export class MenuScene extends Phaser.Scene {
       rainDepth: -1,
       flashDepth: 145,
       flashMaxAlpha: 0.4,
-      lightningMinMs: 4000,
-      lightningMaxMs: 9000,
+      lightningMinMs: 5000,
+      lightningMaxMs: 10000,
       quantity: 2,
       frequency: 48,
+      rainVolume: 0.05,
+      thunderVolume: 0.7,
+      boltChance: 0.45,
+      boltDepth: -0.8,
+      boltTargetY: [360, 560],
     });
 
     startAmbientItems(this, { depth: -0.5, alpha: 0.85, delay: 320 });
 
-    const logo = this.add.image(GAME_WIDTH / 2, 300, UI.logo.key).setOrigin(0.5);
-    logo.setScale(Math.min((GAME_WIDTH * 0.82) / logo.width, 300 / logo.height));
+    const logo = this.add.image(GAME_WIDTH / 2, 270, UI.logo.key).setOrigin(0.5);
+    logo.setScale(Math.min((GAME_WIDTH * 0.8) / logo.width, 280 / logo.height));
 
     this.add
-      .image(GAME_WIDTH / 2, 600, PLAYER_BASES[user.gender].key, 0)
-      .setDisplaySize(180, 180);
-
-    this.add
-      .text(GAME_WIDTH / 2, 740, `Halo, ${user.username}!`, {
+      .text(GAME_WIDTH / 2, 470, "Pilih jagoanmu", {
         fontFamily: "system-ui, sans-serif",
-        fontSize: "34px",
+        fontSize: "32px",
         color: "#e8f0ff",
+        fontStyle: "bold",
       })
       .setOrigin(0.5);
 
+    this.makeCard("male", GAME_WIDTH / 2 - 135, "Laki-laki");
+    this.makeCard("female", GAME_WIDTH / 2 + 135, "Perempuan");
+    this.select(user.gender, false);
+
     this.add
-      .text(GAME_WIDTH / 2, 800, "Tangkap olahraga, hindari kalori berlebih.", {
+      .text(GAME_WIDTH / 2, 806, "Tangkap olahraga, hindari kalori berlebih.", {
         fontFamily: "system-ui, sans-serif",
         fontSize: "24px",
         color: "#9fb0d0",
       })
       .setOrigin(0.5);
 
-    makeButton(this, GAME_WIDTH / 2, 940, "MAIN", () => this.scene.start("HowToPlay"));
-    makeButton(this, GAME_WIDTH / 2, 1070, "PERINGKAT", () => this.scene.start("Leaderboard"), {
+    makeButton(this, GAME_WIDTH / 2, 940, "MAIN", () => {
+      this.scene.start(isTutorialDone() ? "Game" : "Tutorial", { firstTime: true });
+    }, { width: 360 });
+    makeButton(this, GAME_WIDTH / 2 - 150, 1080, "PERINGKAT", () => this.scene.start("Leaderboard"), {
+      width: 280,
+      height: 90,
+      color: 0x37406b,
+    });
+    makeButton(this, GAME_WIDTH / 2 + 150, 1080, "CARA MAIN", () => this.scene.start("Tutorial", { firstTime: false }), {
+      width: 280,
+      height: 90,
       color: 0x37406b,
     });
 
     addFullscreenToggle(this, GAME_WIDTH - 56, 56);
     addMuteToggle(this, 56, 56);
+  }
 
-    this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 60, "Mode demo \u2014 data & token belum terhubung", {
+  private makeCard(gender: Gender, x: number, label: string): void {
+    const box = this.add.graphics();
+    const base = PLAYER_BASES[gender];
+    const sprite = this.add.sprite(x, CARD_Y - 18, base.key, 0).setDisplaySize(170, 170);
+    const idle = `${base.key}_idle`;
+    if (this.anims.exists(idle)) sprite.play(idle);
+    const text = this.add
+      .text(x, CARD_Y + CARD_H / 2 - 32, label, {
         fontFamily: "system-ui, sans-serif",
-        fontSize: "20px",
-        color: "#6b7aa0",
+        fontSize: "26px",
+        color: "#ffffff",
+        fontStyle: "bold",
       })
       .setOrigin(0.5);
+
+    const hit = this.add.zone(x, CARD_Y, CARD_W, CARD_H).setInteractive({ useHandCursor: true });
+    hit.on("pointerup", () => this.select(gender, true));
+
+    this.cards[gender] = { box, sprite, label: text, x };
+  }
+
+  private select(gender: Gender, byUser: boolean): void {
+    const user = this.registry.get("user") as GameUser;
+    if (byUser) {
+      if (user.gender !== gender) Sfx.catchGood(2);
+      else Sfx.click();
+      saveGender(gender);
+    }
+    this.registry.set("user", { ...user, gender });
+
+    for (const g of ["male", "female"] as Gender[]) {
+      const c = this.cards[g];
+      if (!c) continue;
+      const on = g === gender;
+      c.box.clear();
+      c.box.fillStyle(on ? 0x1b3a2a : 0x0b1020, on ? 0.9 : 0.6);
+      c.box.fillRoundedRect(c.x - CARD_W / 2, CARD_Y - CARD_H / 2, CARD_W, CARD_H, 22);
+      c.box.lineStyle(on ? 6 : 3, on ? 0x7cfc8a : 0x2a3450, 1);
+      c.box.strokeRoundedRect(c.x - CARD_W / 2, CARD_Y - CARD_H / 2, CARD_W, CARD_H, 22);
+      c.sprite.setAlpha(on ? 1 : 0.45);
+      c.label.setColor(on ? "#7CFC8A" : "#9fb0d0");
+      if (on) {
+        if (c.sprite.anims.currentAnim) c.sprite.anims.resume();
+        if (byUser) {
+          this.tweens.killTweensOf(c.sprite);
+          c.sprite.setDisplaySize(170, 170);
+          const sx = c.sprite.scaleX;
+          const sy = c.sprite.scaleY;
+          this.tweens.add({ targets: c.sprite, scaleX: sx * 1.15, scaleY: sy * 1.15, duration: 120, yoyo: true });
+        }
+      } else if (c.sprite.anims.currentAnim) {
+        c.sprite.anims.pause();
+      }
+    }
   }
 }
