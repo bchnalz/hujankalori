@@ -108,6 +108,8 @@ class SfxEngine {
   private noiseBuf: AudioBuffer | null = null;
   private muted = false;
   private unlockedAt = 0;
+  private needsFresh = false;
+  private rainLevel = 0;
 
   private rainGain: GainNode | null = null;
 
@@ -126,9 +128,17 @@ class SfxEngine {
     }
     document.addEventListener("visibilitychange", () => {
       if (!this.ctx) return;
-      if (document.hidden) void this.ctx.suspend();
-      else void this.ctx.resume();
+      if (document.hidden) {
+        // iOS Safari "interrupts" the context when the app is backgrounded and
+        // often can't revive it afterwards, even with resume() inside a tap.
+        // So after any trip to the background, the next tap builds a fresh one.
+        this.needsFresh = true;
+        void this.ctx.suspend().catch(() => undefined);
+      } else {
+        void this.ctx.resume().catch(() => undefined);
+      }
     });
+    window.addEventListener("pagehide", () => (this.needsFresh = true));
   }
 
   get unlocked(): boolean {
@@ -139,39 +149,98 @@ class SfxEngine {
     return this.muted;
   }
 
-  /** Create/resume the AudioContext. Call from inside a user-gesture handler. */
+  /**
+   * Create/resume the AudioContext. Must be called from inside a real user
+   * gesture (tap/click/key) — main.ts wires it to every native gesture.
+   */
   unlock(): void {
-    if (!this.ctx) {
-      const Ctor =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!Ctor) return;
-      this.ctx = new Ctor();
-      this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.9;
-      this.master.connect(this.ctx.destination);
-
-      const comp = this.ctx.createDynamicsCompressor();
-      comp.threshold.value = -14;
-      comp.ratio.value = 4;
-      comp.connect(this.master);
-
-      this.sfxBus = this.ctx.createGain();
-      this.sfxBus.gain.value = 0.8;
-      this.sfxBus.connect(comp);
-
-      this.musicBus = this.ctx.createGain();
-      this.musicBus.gain.value = 0.22;
-      this.musicBus.connect(comp);
-
-      const len = this.ctx.sampleRate * 2;
-      this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-      const data = this.noiseBuf.getChannelData(0);
-      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    const state = this.ctx?.state as string | undefined;
+    if (this.ctx && (this.needsFresh || state === "interrupted" || state === "closed")) {
+      this.rebuild();
+    } else if (!this.ctx) {
+      if (!this.createContext()) return;
     }
-    if (this.ctx.state !== "running") {
+    const ctx = this.ctx!;
+    if (ctx.state !== "running") {
       this.unlockedAt = performance.now();
-      void this.ctx.resume().then(() => this.flushPending());
+      void ctx
+        .resume()
+        .then(() => this.flushPending())
+        .catch(() => (this.needsFresh = true));
+      // If it still isn't running shortly after, rebuild on the next tap.
+      window.setTimeout(() => {
+        if (this.ctx === ctx && ctx.state !== "running") this.needsFresh = true;
+      }, 600);
+    }
+    this.primeOutput();
+  }
+
+  /** Throw away the current context and build a new one, keeping rain + music. */
+  private rebuild(): void {
+    const keepRain = this.rainLevel;
+    const keepTrack = this.track?.name ?? this.pendingMusic;
+    if (this.musicTimer !== null) {
+      window.clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
+    this.track = null;
+    const old = this.ctx;
+    this.ctx = null;
+    this.master = this.sfxBus = this.musicBus = null;
+    this.rainGain = this.rainLfoDepth = null;
+    this.noiseBuf = null;
+    void old?.close().catch(() => undefined);
+    if (!this.createContext()) return;
+    this.unlockedAt = performance.now();
+    if (keepRain > 0) this.pendingRain = keepRain;
+    if (keepTrack) this.pendingMusic = keepTrack;
+    this.flushPending();
+  }
+
+  private createContext(): boolean {
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return false;
+    this.needsFresh = false;
+    const ctx = (this.ctx = new Ctor());
+    this.unlockedAt = performance.now();
+    this.master = ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : 0.9;
+    this.master.connect(ctx.destination);
+
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -14;
+    comp.ratio.value = 4;
+    comp.connect(this.master);
+
+    this.sfxBus = ctx.createGain();
+    this.sfxBus.gain.value = 0.8;
+    this.sfxBus.connect(comp);
+
+    this.musicBus = ctx.createGain();
+    this.musicBus.gain.value = 0.22;
+    this.musicBus.connect(comp);
+
+    const len = ctx.sampleRate * 2;
+    this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    return true;
+  }
+
+  /** Play a 1-sample silent buffer — iOS only opens the output after this. */
+  private primeOutput(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    try {
+      const b = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = b;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -369,6 +438,7 @@ class SfxEngine {
    * "gust" swell. `level` ~0.05 for menus, ~0.02 under gameplay music.
    */
   setRainLevel(level: number): void {
+    this.rainLevel = level;
     if (!this.ready()) {
       this.pendingRain = level;
       return;
