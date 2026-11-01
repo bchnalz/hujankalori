@@ -116,7 +116,10 @@ export class GameOverScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
+    Sfx.stopMusic(0.1);
+    Sfx.setRainLevel(0.05);
     Sfx.gameOver(starved);
+    this.time.delayedCall(3200, () => Sfx.playMusic("menu"));
 
     if (this.result.survivalSeconds >= 1) {
       this.buildEntry();

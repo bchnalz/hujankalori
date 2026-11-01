@@ -23,10 +23,17 @@ play system (later passes).
 
 ## 2a. Start flow (onboarding & intro)
 
-- **How-to-play screen** (`HowToPlayScene`): shown from the Menu before the first
-  game. Explains movement, junk vs healthy vs activity, water, and the starvation
-  timer using item sprites + simple cartoon faces and playful captions. Quick
-  retries from Game Over skip it and go straight to the countdown.
+- **Start screen** (`StartScene`): one big MULAI button on page load. The tap
+  unlocks browser audio and opens with a lightning strike + thunder.
+- **Character pick** (Menu): male/female cards; the choice is remembered per
+  device (`src/data/prefs.ts`). No name is asked up front; initials are entered
+  at game over for the leaderboard.
+- **Interactive tutorial** (`TutorialScene`): runs automatically the first time
+  MAIN is pressed on a device, and can be replayed from "CARA MAIN". Steps:
+  move → catch an activity (calorie limit rises) → eat healthy food (hunger
+  timer refills) → dodge heavy food. Nothing in it can end the game; "Sudah
+  paham? Lewati" skips at any time. Retries from Game Over go straight to the
+  countdown.
 - **Countdown intro:** every run begins with a **3-2-1 → MULAI!** counter while
   the HP bar animates from **0 → 100%**. Spawning, the survival timer, and the
   starvation timer only start after "MULAI!". Tunable via `gameConfig.intro`

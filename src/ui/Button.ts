@@ -7,7 +7,7 @@ export function makeButton(
   y: number,
   label: string,
   onClick: () => void,
-  opts: { width?: number; height?: number; color?: number } = {},
+  opts: { width?: number; height?: number; color?: number; fontSize?: number } = {},
 ): Phaser.GameObjects.Container {
   const width = opts.width ?? 320;
   const height = opts.height ?? 96;
@@ -19,7 +19,7 @@ export function makeButton(
   const text = scene.add
     .text(0, 0, label, {
       fontFamily: "system-ui, sans-serif",
-      fontSize: "40px",
+      fontSize: `${opts.fontSize ?? 40}px`,
       color: "#ffffff",
       fontStyle: "bold",
     })

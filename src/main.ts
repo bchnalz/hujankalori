@@ -4,7 +4,7 @@ import { BootScene } from "./scenes/BootScene";
 import { StartScene } from "./scenes/StartScene";
 import { SplashScene } from "./scenes/SplashScene";
 import { MenuScene } from "./scenes/MenuScene";
-import { HowToPlayScene } from "./scenes/HowToPlayScene";
+import { TutorialScene } from "./scenes/TutorialScene";
 import { GameScene } from "./scenes/GameScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { LeaderboardScene } from "./scenes/LeaderboardScene";
@@ -27,7 +27,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [BootScene, StartScene, SplashScene, MenuScene, HowToPlayScene, GameScene, GameOverScene, LeaderboardScene],
+  scene: [BootScene, StartScene, SplashScene, MenuScene, TutorialScene, GameScene, GameOverScene, LeaderboardScene],
 };
 
 const game = new Phaser.Game(config);

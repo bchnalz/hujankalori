@@ -64,12 +64,17 @@ export class GameScene extends Phaser.Scene {
       rainDepth: -1,
       flashDepth: 145,
       flashMaxAlpha: 0.32,
-      lightningMinMs: 5000,
-      lightningMaxMs: 11000,
+      lightningMinMs: 9000,
+      lightningMaxMs: 15000,
       quantity: 2,
       frequency: 52,
-      thunderVolume: 0.35,
+      thunderVolume: 0.75,
+      rainVolume: 0.02,
+      boltChance: 0.8,
+      boltDepth: -0.5,
+      boltTargetY: [520, 960],
     });
+    Sfx.stopMusic(0.5);
 
     const footerTop = gameConfig.footer.top;
     const footer = this.add.graphics().setDepth(1);
@@ -288,6 +293,7 @@ export class GameScene extends Phaser.Scene {
 
     this.hud.update(this.hp, elapsed);
     Sfx.setMusicTempo(1 + elapsed / 240);
+    this.weather.setRate(1 + elapsed / 90);
 
     if (this.hp <= 0) {
       this.endGame(elapsed, "hp");
@@ -333,7 +339,7 @@ export class GameScene extends Phaser.Scene {
     this.hud.update(this.hp, 0);
     this.warnBorder.setVisible(false);
     this.countdownText.destroy();
-    Sfx.startMusic();
+    Sfx.playMusic("game");
   }
 
   private endGame(elapsed: number, reason: "hp" | "starve"): void {

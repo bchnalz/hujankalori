@@ -41,6 +41,10 @@ export class Hud {
       .setDepth(102);
   }
 
+  setTimerVisible(v: boolean): void {
+    this.timeText.setVisible(v);
+  }
+
   update(hp: number, elapsedSeconds: number): void {
     const ratio = Phaser.Math.Clamp(hp / gameConfig.maxHp, 0, 1);
 
