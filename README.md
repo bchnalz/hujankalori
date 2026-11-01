@@ -48,16 +48,28 @@ screen** (`StartScene`) whose MULAI button unlocks audio and fires the opening
 lightning strike. A mute button (top-left) is remembered per device.
 
 **Leaderboard (no login).** At game over the player types **4-letter
-initials**; scores go to a public board stored in **Vercel KV** (Upstash Redis)
-through the serverless function `api/leaderboard.ts`.
+initials**. Each initials keeps only its **best** score, on three boards:
+**Hari Ini**, **Minggu Ini** (both on the WIB calendar, ISO weeks) and
+**Semua** (all time). Data lives in **Vercel KV** (Upstash Redis) behind the
+serverless function `api/leaderboard.ts`.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/leaderboard?limit=20` | Top scores |
-| `POST /api/leaderboard` `{ name, score }` | Submit; returns rank + top 10 |
+| `GET /api/leaderboard?period=day\|week\|all&limit=15&name=ABCD` | Top scores + total players + that initials' rank |
+| `POST /api/leaderboard` `{ action: "start" }` | Open a run session (called when "MULAI!" appears) |
+| `POST /api/leaderboard` `{ name, score, sid }` | Submit; returns rank/total/best/top-10 for all three boards |
 
-Server-side guards: `^[A-Z]{4}$` initials, an offensive-initials blocklist,
-score range 1–3600 s, and 6 submissions per IP per minute.
+Anti-cheat:
+- Survival time is accumulated from frame deltas, and the game **auto-pauses**
+  when the tab/app is hidden, so time spent away never counts.
+- Every run needs a single-use server session; a score longer than the real
+  time since that session started (+3 s) is rejected (`score_mismatch`).
+- `^[A-Z]{4}$` initials, offensive-initials blocklist, score range 1–3600 s,
+  6 submissions and 30 run starts per IP per minute.
+
+Redis keys: `hk:v2:all`, `hk:v2:w:<YYYY-Www>` (21-day TTL),
+`hk:v2:d:<YYYY-MM-DD>` (3-day TTL), `hk:s:<sid>` (2-hour TTL). Scores from the
+first version (`hk:lb`) are migrated into the all-time board automatically.
 
 ### Connecting Vercel KV
 1. In the Vercel project: **Storage → Create Database → Upstash for Redis**

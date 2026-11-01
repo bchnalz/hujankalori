@@ -1,14 +1,20 @@
 /**
  * Hujan Kalori leaderboard — Vercel serverless function backed by Vercel KV
- * (Upstash Redis). Talks to the Upstash REST API with plain fetch, so there
- * are no runtime dependencies.
+ * (Upstash Redis), using the Upstash REST API via plain fetch (no deps).
  *
- *   GET  /api/leaderboard?limit=20   -> { entries: Entry[] }
- *   POST /api/leaderboard {name, score} -> { rank, id, entries }
+ * One row per 4-letter initials (best score kept), on three boards:
+ * today, this week (both in WIB / UTC+7) and all time.
  *
- * Env (added automatically when a KV / Upstash Redis store is connected to the
- * Vercel project): KV_REST_API_URL + KV_REST_API_TOKEN
- * (or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
+ *   GET  /api/leaderboard?period=day|week|all&limit=15&name=ABCD
+ *        -> { period, entries, total, me: {rank, score} | null }
+ *   POST /api/leaderboard { action: "start" }           -> { sid }
+ *   POST /api/leaderboard { name, score, sid }          -> SubmitResponse
+ *
+ * Anti-cheat: every run must start a server session; the submitted survival
+ * time can't exceed the real time elapsed since that session started.
+ *
+ * Env (added when a KV / Upstash Redis store is connected to the project):
+ * KV_REST_API_URL + KV_REST_API_TOKEN (or UPSTASH_REDIS_REST_URL + _TOKEN).
  */
 
 interface Req {
@@ -24,6 +30,9 @@ interface Res {
   end(): void;
 }
 
+type Period = "day" | "week" | "all";
+const PERIODS: Period[] = ["day", "week", "all"];
+
 interface Entry {
   rank: number;
   name: string;
@@ -31,14 +40,25 @@ interface Entry {
   id: string;
 }
 
+interface Standing {
+  rank: number | null;
+  total: number;
+  best: number | null;
+  entries: Entry[];
+}
+
 const env = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env;
 const KV_URL = env.KV_REST_API_URL ?? env.UPSTASH_REDIS_REST_URL;
 const KV_TOKEN = env.KV_REST_API_TOKEN ?? env.UPSTASH_REDIS_REST_TOKEN;
 
-const BOARD = "hk:lb";
-const KEEP = 500; // entries kept in the sorted set
 const MAX_SCORE_SEC = 3600;
-const RATE_LIMIT = 6; // submissions per IP per minute
+const SUBMIT_LIMIT = 6; // submissions per IP per minute
+const START_LIMIT = 30; // runs started per IP per minute
+const SESSION_TTL = 2 * 60 * 60; // seconds
+const TOLERANCE_SEC = 3; // network latency between client start and server start
+const KEEP_ALL = 10000;
+const TTL = { day: 3 * 86400, week: 21 * 86400 };
+const WIB_OFFSET_MS = 7 * 3600 * 1000;
 
 // Initials that are not allowed on the public board (ID + EN).
 const BLOCKED = new Set([
@@ -47,6 +67,8 @@ const BLOCKED = new Set([
   "BEGO", "ASUU", "PERE", "FUCK", "FUKK", "SHIT", "CUNT", "DICK", "COCK", "PUSS", "SLUT", "WHOR",
   "NIGG", "NIGA", "FAGG", "RAPE", "PORN", "SEXX", "SEKS", "TITS", "BOOB", "ANAL", "PENS", "VAGN",
 ]);
+
+// ------------------------------------------------------------------ helpers
 
 async function kv(commands: (string | number)[][]): Promise<unknown[]> {
   const r = await fetch(`${KV_URL}/pipeline`, {
@@ -62,14 +84,39 @@ async function kv(commands: (string | number)[][]): Promise<unknown[]> {
   });
 }
 
-function parseRange(flat: unknown, offset = 0): Entry[] {
+/** Board key for a period, using the calendar in WIB (UTC+7). */
+function boardKey(period: Period, now = Date.now()): string {
+  if (period === "all") return "hk:v2:all";
+  const d = new Date(now + WIB_OFFSET_MS); // read with UTC getters => WIB wall clock
+  if (period === "day") return `hk:v2:d:${d.toISOString().slice(0, 10)}`;
+  // ISO week (Mon–Sun)
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dow = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - dow);
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `hk:v2:w:${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function parseRange(flat: unknown): Entry[] {
   const arr = Array.isArray(flat) ? (flat as string[]) : [];
   const entries: Entry[] = [];
   for (let i = 0; i + 1 < arr.length; i += 2) {
-    const [name, id = ""] = String(arr[i]).split(":");
-    entries.push({ rank: offset + entries.length + 1, name, id, score: Number(arr[i + 1]) / 100 });
+    const name = String(arr[i]);
+    entries.push({ rank: entries.length + 1, name, id: name, score: Number(arr[i + 1]) / 100 });
   }
   return entries;
+}
+
+const toScore = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v) / 100);
+const toRank = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v) + 1);
+
+function newSessionId(): string {
+  const c = (globalThis as { crypto?: { getRandomValues(a: Uint8Array): Uint8Array } }).crypto;
+  const bytes = new Uint8Array(12);
+  if (c) c.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  return [...bytes].map((x) => x.toString(36).padStart(2, "0")).join("").slice(0, 20);
 }
 
 function clientIp(req: Req): string {
@@ -77,6 +124,38 @@ function clientIp(req: Req): string {
   const v = Array.isArray(fwd) ? fwd[0] : fwd;
   return (v ?? "unknown").split(",")[0].trim();
 }
+
+function q(req: Req, key: string): string | undefined {
+  const v = req.query?.[key];
+  return Array.isArray(v) ? v[0] : v;
+}
+
+async function rateLimited(key: string, limit: number): Promise<boolean> {
+  const [, count] = await kv([
+    ["SET", key, 0, "EX", 60, "NX"],
+    ["INCR", key],
+  ]);
+  return Number(count) > limit;
+}
+
+/** One-time copy of the v1 board ("NAME:id" members) into the v2 all-time board. */
+let migrated = false;
+async function migrateV1(): Promise<void> {
+  if (migrated) return;
+  migrated = true;
+  const [first] = await kv([["SET", "hk:v2:migrated", 1, "NX"]]);
+  if (first !== "OK") return;
+  const [old] = await kv([["ZRANGE", "hk:lb", 0, -1, "WITHSCORES"]]);
+  const arr = Array.isArray(old) ? (old as string[]) : [];
+  const cmds: (string | number)[][] = [];
+  for (let i = 0; i + 1 < arr.length; i += 2) {
+    const name = String(arr[i]).split(":")[0];
+    if (/^[A-Z]{4}$/.test(name)) cmds.push(["ZADD", boardKey("all"), "GT", arr[i + 1], name]);
+  }
+  if (cmds.length) await kv(cmds);
+}
+
+// ------------------------------------------------------------------ handler
 
 export default async function handler(req: Req, res: Res): Promise<void> {
   res.setHeader("Cache-Control", "no-store");
@@ -87,25 +166,53 @@ export default async function handler(req: Req, res: Res): Promise<void> {
   }
 
   try {
+    await migrateV1();
+
     if (req.method === "GET") {
-      const raw = Array.isArray(req.query?.limit) ? req.query?.limit[0] : req.query?.limit;
-      const limit = Math.min(Math.max(Number(raw) || 20, 1), 50);
-      const [range] = await kv([["ZREVRANGE", BOARD, 0, limit - 1, "WITHSCORES"]]);
-      res.status(200).json({ entries: parseRange(range) });
+      const period = (PERIODS as string[]).includes(q(req, "period") ?? "") ? (q(req, "period") as Period) : "all";
+      const limit = Math.min(Math.max(Number(q(req, "limit")) || 15, 1), 50);
+      const name = (q(req, "name") ?? "").toUpperCase();
+      const key = boardKey(period);
+      const cmds: (string | number)[][] = [
+        ["ZREVRANGE", key, 0, limit - 1, "WITHSCORES"],
+        ["ZCARD", key],
+      ];
+      const withMe = /^[A-Z]{4}$/.test(name);
+      if (withMe) cmds.push(["ZREVRANK", key, name], ["ZSCORE", key, name]);
+      const out = await kv(cmds);
+      const me = withMe && out[2] !== null ? { rank: toRank(out[2]), score: toScore(out[3]) } : null;
+      res.status(200).json({ period, entries: parseRange(out[0]), total: Number(out[1]), me });
       return;
     }
 
     if (req.method === "POST") {
-      let body = req.body as { name?: unknown; score?: unknown } | string | undefined;
+      let body = req.body as Record<string, unknown> | string | undefined;
       if (typeof body === "string") {
         try {
-          body = JSON.parse(body) as { name?: unknown; score?: unknown };
+          body = JSON.parse(body) as Record<string, unknown>;
         } catch {
           body = undefined;
         }
       }
-      const name = String((body as { name?: unknown })?.name ?? "").toUpperCase();
-      const score = Number((body as { score?: unknown })?.score);
+      const b = (body ?? {}) as Record<string, unknown>;
+      const ip = clientIp(req);
+
+      // ---- start a run
+      if (b.action === "start") {
+        if (await rateLimited(`hk:rls:${ip}`, START_LIMIT)) {
+          res.status(429).json({ error: "rate_limited" });
+          return;
+        }
+        const sid = newSessionId();
+        await kv([["SET", `hk:s:${sid}`, Date.now(), "EX", SESSION_TTL]]);
+        res.status(200).json({ sid });
+        return;
+      }
+
+      // ---- submit a score
+      const name = String(b.name ?? "").toUpperCase();
+      const score = Number(b.score);
+      const sid = String(b.sid ?? "");
 
       if (!/^[A-Z]{4}$/.test(name)) {
         res.status(400).json({ error: "invalid_name" });
@@ -119,28 +226,69 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         res.status(400).json({ error: "invalid_score" });
         return;
       }
-
-      const rl = `hk:rl:${clientIp(req)}`;
-      const [, count] = await kv([
-        ["SET", rl, 0, "EX", 60, "NX"],
-        ["INCR", rl],
-      ]);
-      if (Number(count) > RATE_LIMIT) {
+      if (!/^[a-z0-9]{8,32}$/.test(sid)) {
+        res.status(400).json({ error: "invalid_session" });
+        return;
+      }
+      if (await rateLimited(`hk:rl:${ip}`, SUBMIT_LIMIT)) {
         res.status(429).json({ error: "rate_limited" });
         return;
       }
 
-      const id = Math.random().toString(36).slice(2, 10);
-      const member = `${name}:${id}`;
-      const cs = Math.round(score * 100);
-      const [, rank, range] = await kv([
-        ["ZADD", BOARD, cs, member],
-        ["ZREVRANK", BOARD, member],
-        ["ZREVRANGE", BOARD, 0, 9, "WITHSCORES"],
-        ["ZREMRANGEBYRANK", BOARD, 0, -(KEEP + 1)],
-      ]);
+      // Session is single-use.
+      const [started] = await kv([["GETDEL", `hk:s:${sid}`]]);
+      if (started === null || started === undefined) {
+        res.status(400).json({ error: "invalid_session" });
+        return;
+      }
+      const realSec = (Date.now() - Number(started)) / 1000;
+      if (score > realSec + TOLERANCE_SEC) {
+        res.status(400).json({ error: "score_mismatch" });
+        return;
+      }
 
-      res.status(200).json({ id, rank: Number(rank) + 1, entries: parseRange(range) });
+      const now = Date.now();
+      const keys = { day: boardKey("day", now), week: boardKey("week", now), all: boardKey("all", now) };
+      const cs = Math.round(score * 100);
+
+      const [prevAll] = await kv([["ZSCORE", keys.all, name]]);
+      const cmds: (string | number)[][] = [
+        ["ZADD", keys.day, "GT", cs, name],
+        ["ZADD", keys.week, "GT", cs, name],
+        ["ZADD", keys.all, "GT", cs, name],
+        ["EXPIRE", keys.day, TTL.day],
+        ["EXPIRE", keys.week, TTL.week],
+      ];
+      for (const p of PERIODS) {
+        cmds.push(
+          ["ZREVRANK", keys[p], name],
+          ["ZCARD", keys[p]],
+          ["ZSCORE", keys[p], name],
+          ["ZREVRANGE", keys[p], 0, 9, "WITHSCORES"],
+        );
+      }
+      cmds.push(["ZREMRANGEBYRANK", keys.all, 0, -(KEEP_ALL + 1)]);
+      const out = await kv(cmds);
+
+      const periods = {} as Record<Period, Standing>;
+      PERIODS.forEach((p, i) => {
+        const o = 5 + i * 4;
+        periods[p] = {
+          rank: toRank(out[o]),
+          total: Number(out[o + 1]),
+          best: toScore(out[o + 2]),
+          entries: parseRange(out[o + 3]),
+        };
+      });
+
+      const previousBest = toScore(prevAll);
+      res.status(200).json({
+        name,
+        score,
+        previousBest,
+        improved: previousBest === null || cs > Math.round(previousBest * 100),
+        periods,
+      });
       return;
     }
 

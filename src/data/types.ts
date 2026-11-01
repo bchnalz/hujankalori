@@ -9,4 +9,6 @@ export interface GameUser {
 export interface SessionResult {
   survivalSeconds: number;
   reason?: "hp" | "starve";
+  /** Server run-session id (null when offline). */
+  sid?: Promise<string | null>;
 }

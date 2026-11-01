@@ -3,17 +3,22 @@ import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
 import { BACKGROUND } from "../config/assetManifest";
 import type { SessionResult } from "../data/types";
 import {
-  fetchTop,
+  fetchBoard,
   getSavedInitials,
   isNameAllowed,
+  PERIOD_LABEL,
   recordPersonalBest,
   submitScore,
   type LeaderboardEntry,
+  type Period,
+  type Standing,
+  type SubmitResult,
 } from "../data/leaderboard";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { addMuteToggle } from "../ui/MuteToggle";
 import { renderLeaderboard } from "../ui/LeaderboardPanel";
+import { addPeriodTabs } from "../ui/PeriodTabs";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SLOTS = 4;
@@ -27,6 +32,11 @@ export class GameOverScene extends Phaser.Scene {
   private msgText!: Phaser.GameObjects.Text;
   private busy = false;
   private phase: "entry" | "board" = "entry";
+  private submitted: SubmitResult | null = null;
+  private boardPanel?: Phaser.GameObjects.Container;
+  private boardHeader!: Phaser.GameObjects.Text;
+  private boardSub!: Phaser.GameObjects.Text;
+  private boardReq = 0;
 
   constructor() {
     super("GameOver");
@@ -40,6 +50,8 @@ export class GameOverScene extends Phaser.Scene {
     this.busy = false;
     this.phase = "entry";
     this.slotTexts = [];
+    this.submitted = null;
+    this.boardPanel = undefined;
     this.name = getSavedInitials();
 
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
@@ -124,7 +136,7 @@ export class GameOverScene extends Phaser.Scene {
     if (this.result.survivalSeconds >= 1) {
       this.buildEntry();
     } else {
-      void this.showBoard();
+      this.showBoard();
     }
   }
 
@@ -201,7 +213,7 @@ export class GameOverScene extends Phaser.Scene {
 
     c.add(makeButton(this, 220, 1130, "KIRIM", () => void this.submit(), { width: 300, height: 96 }));
     c.add(
-      makeButton(this, 530, 1130, "LEWATI", () => void this.showBoard(), {
+      makeButton(this, 530, 1130, "LEWATI", () => this.showBoard(), {
         width: 240,
         height: 96,
         color: 0x37406b,
@@ -312,10 +324,11 @@ export class GameOverScene extends Phaser.Scene {
       return;
     }
     this.busy = true;
-    this.msgText.setColor("#9fb0d0").setText("Mengirim skor…");
+    this.msgText.setColor("#9fb0d0").setText("Mengirim skor\u2026");
     Sfx.submit();
 
-    const r = await submitScore(this.name, this.result.survivalSeconds);
+    const sid = await (this.result.sid ?? Promise.resolve(null));
+    const r = await submitScore(this.name, this.result.survivalSeconds, sid);
     if (!this.scene.isActive()) return;
     if (!r.ok) {
       this.busy = false;
@@ -324,76 +337,109 @@ export class GameOverScene extends Phaser.Scene {
           ? "Terlalu sering mengirim. Tunggu sebentar ya."
           : r.error === "blocked_name"
             ? "Inisial itu tidak bisa dipakai. Coba yang lain."
-            : "Gagal mengirim skor. Coba lagi.";
+            : r.error === "score_mismatch" || r.error === "invalid_session"
+              ? "Skor ini tidak bisa diverifikasi server."
+              : "Gagal mengirim skor. Coba lagi.";
       this.msgText.setColor("#ff8a80").setText(msg);
       return;
     }
 
-    let extra: LeaderboardEntry | undefined;
-    const inTop = r.entries.some((e) => e.id === r.id);
-    if (!inTop && r.rank && r.id) {
-      extra = { rank: r.rank, name: this.name, score: this.result.survivalSeconds, id: r.id };
+    this.submitted = r;
+    // Open the tab where the player ranks best (prefer the broader board on ties).
+    let period: Period = "all";
+    let best = Infinity;
+    for (const p of ["all", "week", "day"] as Period[]) {
+      const rank = r.periods?.[p]?.rank ?? Infinity;
+      if (rank < best) {
+        best = rank;
+        period = p;
+      }
     }
-    if (r.rank && r.rank <= 3) Sfx.newRecord();
-    this.showBoard({ entries: r.entries, online: r.online, highlightId: r.id, extra, rank: r.rank });
+    if (best <= 3) Sfx.newRecord();
+    this.showBoard(period);
   }
 
   // ------------------------------------------------------------ leaderboard
 
-  private async showBoard(pre?: {
-    entries: LeaderboardEntry[];
-    online: boolean;
-    highlightId?: string;
-    extra?: LeaderboardEntry;
-    rank?: number;
-  }): Promise<void> {
+  private showBoard(period: Period = "week"): void {
     if (this.phase === "board") return;
     this.phase = "board";
     this.busy = true;
     this.entryUi?.destroy();
 
-    const loading = this.add
-      .text(GAME_WIDTH / 2, 640, "Memuat peringkat…", {
+    this.boardHeader = this.add
+      .text(GAME_WIDTH / 2, 482, "", {
         fontFamily: "system-ui, sans-serif",
-        fontSize: "26px",
+        fontSize: "30px",
+        color: "#ffd54f",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    this.boardSub = this.add
+      .text(GAME_WIDTH / 2, 520, "", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "21px",
         color: "#9fb0d0",
       })
       .setOrigin(0.5);
 
-    const data = pre ?? (await fetchTop(10));
-    if (!this.scene.isActive()) return;
-    loading.destroy();
+    addPeriodTabs(this, GAME_WIDTH / 2, 572, period, (p) => this.renderPeriod(p));
+    this.renderPeriod(period);
 
-    const header = pre?.rank ? `Peringkat kamu: #${pre.rank}` : "PERINGKAT TERATAS";
-    this.add
-      .text(GAME_WIDTH / 2, 500, header, {
-        fontFamily: "system-ui, sans-serif",
-        fontSize: "32px",
-        color: pre?.rank ? "#ffd54f" : "#e8f0ff",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
+    makeButton(this, 220, 1160, "MAIN LAGI", () => this.scene.start("Game"), { width: 300 });
+    makeButton(this, 530, 1160, "MENU", () => this.scene.start("Menu"), { width: 240, color: 0x37406b });
+  }
 
-    const rows = data.entries.slice(0, pre?.extra ? 8 : 10);
-    const panel = renderLeaderboard(this, GAME_WIDTH / 2, 540, rows, {
-      highlightId: pre?.highlightId,
-      extra: pre?.extra,
-      rowHeight: 48,
-    });
-    panel.setAlpha(0);
-    this.tweens.add({ targets: panel, alpha: 1, y: "-=10", duration: 260 });
+  private renderPeriod(period: Period): void {
+    const id = ++this.boardReq;
+    this.boardPanel?.destroy();
+    this.boardPanel = undefined;
+    const r = this.submitted;
+    const label = PERIOD_LABEL[period].toLowerCase();
 
-    if (!data.online) {
-      this.add
-        .text(GAME_WIDTH / 2, 1076, "Offline — peringkat disimpan di perangkat ini", {
-          fontFamily: "system-ui, sans-serif",
-          fontSize: "20px",
-          color: "#6b7aa0",
-        })
-        .setOrigin(0.5);
+    if (r?.periods) {
+      this.drawBoard(period, r.periods[period], this.name, r.online);
+      const st = r.periods[period];
+      this.boardHeader.setText(
+        st.rank ? `#${st.rank.toLocaleString("id-ID")} ${label} dari ${st.total.toLocaleString("id-ID")} pemain` : "",
+      );
+      const subs: string[] = [];
+      if (!r.improved && r.previousBest !== null && r.previousBest !== undefined) {
+        subs.push(`Skor terbaik ${this.name} tetap ${r.previousBest.toFixed(1)} dtk`);
+      } else if (r.improved && r.previousBest) {
+        subs.push(`Rekor ${this.name} naik dari ${r.previousBest.toFixed(1)} dtk!`);
+      }
+      if (!r.online) subs.push("Offline \u2014 disimpan di perangkat ini");
+      this.boardSub.setText(subs.join(" \u2022 "));
+      return;
     }
 
-    makeButton(this, 220, 1150, "MAIN LAGI", () => this.scene.start("Game"), { width: 300 });
-    makeButton(this, 530, 1150, "MENU", () => this.scene.start("Menu"), { width: 240, color: 0x37406b });
+    // Skipped entry: just show the board.
+    this.boardHeader.setColor("#e8f0ff").setText("PERINGKAT TERATAS");
+    this.boardSub.setText("Memuat\u2026");
+    void fetchBoard(period, 9).then((data) => {
+      if (!this.scene.isActive() || id !== this.boardReq) return;
+      this.boardSub.setText(data.online ? `${data.total.toLocaleString("id-ID")} pemain ${label}` : "Offline \u2014 skor di perangkat ini");
+      this.drawBoard(period, { rank: null, total: data.total, best: null, entries: data.entries }, "", data.online);
+    });
+  }
+
+  private drawBoard(period: Period, st: Standing, me: string, _online: boolean): void {
+    const ROW_H = 44;
+    const TOP = 616;
+    const inTop = st.entries.some((e) => e.name === me);
+    let extra: LeaderboardEntry | undefined;
+    if (me && !inTop && st.rank && st.best !== null) {
+      extra = { rank: st.rank, name: me, score: st.best, id: me };
+    }
+    const rows = st.entries.slice(0, extra ? 7 : 9);
+    this.boardPanel = renderLeaderboard(this, GAME_WIDTH / 2, TOP, rows, {
+      highlightId: me || undefined,
+      extra,
+      rowHeight: ROW_H,
+      emptyText: period === "all" ? "Belum ada skor." : `Belum ada skor ${PERIOD_LABEL[period].toLowerCase()}.`,
+    });
+    this.boardPanel.setAlpha(0);
+    this.tweens.add({ targets: this.boardPanel, alpha: 1, duration: 200 });
   }
 }
