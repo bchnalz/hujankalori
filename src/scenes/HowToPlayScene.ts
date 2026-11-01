@@ -6,6 +6,7 @@ import { PLAYER_BASES } from "../config/playerConfig";
 import type { GameUser } from "../data/types";
 import { makeButton } from "../ui/Button";
 import { addFullscreenToggle } from "../ui/FullscreenToggle";
+import { addMuteToggle } from "../ui/MuteToggle";
 
 type Mood = "happy" | "sad" | "wow";
 
@@ -100,6 +101,7 @@ export class HowToPlayScene extends Phaser.Scene {
     makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 100, "MULAI!", () => this.scene.start("Game"));
 
     addFullscreenToggle(this, GAME_WIDTH - 56, 56);
+    addMuteToggle(this, 56, 56);
   }
 
   private row(y: number, drawIcon: (cx: number, cy: number) => void, caption: string, mood: Mood): void {

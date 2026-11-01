@@ -39,6 +39,39 @@ move the player; on desktop you can also use the arrow keys.
 | `npm run assets` | (Re)generate placeholder PNGs into `public/assets/` |
 | `npm run preview` | Preview the production build |
 
+## Sound & leaderboard
+
+**Sound.** All SFX and the gameplay music are synthesized at runtime with the
+Web Audio API (`src/audio/Sfx.ts`), so there are no audio files to load.
+Browsers block audio until the first tap, so the game now opens on a **Start
+screen** (`StartScene`) whose MULAI button unlocks audio and fires the opening
+lightning strike. A mute button (top-left) is remembered per device.
+
+**Leaderboard (no login).** At game over the player types **4-letter
+initials**; scores go to a public board stored in **Vercel KV** (Upstash Redis)
+through the serverless function `api/leaderboard.ts`.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/leaderboard?limit=20` | Top scores |
+| `POST /api/leaderboard` `{ name, score }` | Submit; returns rank + top 10 |
+
+Server-side guards: `^[A-Z]{4}$` initials, an offensive-initials blocklist,
+score range 1–3600 s, and 6 submissions per IP per minute.
+
+### Connecting Vercel KV
+1. In the Vercel project: **Storage → Create Database → Upstash for Redis**
+   (the current home of Vercel KV; the free plan is enough) and connect it to
+   this project for all environments.
+2. Vercel injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically
+   (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` also work).
+3. Redeploy. No code or dependency changes needed.
+
+Until KV is connected, or when running plain `npm run dev` (Vite does not
+serve `/api`), the game falls back to a **local per-device board** and shows
+an "Offline" note. To test the real API locally use `vercel dev` after
+`vercel env pull`.
+
 ## Documentation
 
 - [`docs/GDD.md`](docs/GDD.md) — game design, mechanics, tuning, balance notes

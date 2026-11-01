@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { Sfx } from "../audio/Sfx";
 
 export function makeButton(
   scene: Phaser.Scene,
@@ -32,6 +33,7 @@ export function makeButton(
   container.on("pointerdown", () => container.setScale(0.96));
   container.on("pointerup", () => {
     container.setScale(1);
+    Sfx.click();
     onClick();
   });
 
