@@ -36,7 +36,7 @@ if (import.meta.env.DEV) (window as unknown as { __hk: Phaser.Game }).__hk = gam
 // Unlock Web Audio directly inside native gesture events (iOS needs the
 // AudioContext to be resumed synchronously in a real touch/click handler).
 const unlockAudio = (): void => Sfx.unlock();
-for (const ev of ["pointerup", "touchend", "keydown"]) {
+for (const ev of ["pointerup", "touchend", "click", "keydown"]) {
   document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
 }
 
