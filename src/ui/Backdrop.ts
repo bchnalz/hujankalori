@@ -1532,3 +1532,49 @@ export function addBackdrop(scene: Phaser.Scene, opts: BackdropOpts = {}): void 
     }
   }
 }
+
+/**
+ * Static preview of a scenery for the location picker: sky, clouds, distant
+ * city, the building layer and the wet ground composited onto one canvas,
+ * cropped to the lower part where the building is. Cached per variant/size.
+ */
+export function makeBackdropThumb(scene: Phaser.Scene, variant: BackdropVariant, w: number, h: number): string {
+  const key = `__bd_thumb_${variant}_${w}x${h}`;
+  if (scene.textures.exists(key)) return key;
+  const horizon = 1020;
+  const src = (k: string): CanvasImageSource => scene.textures.get(k).getSourceImage() as CanvasImageSource;
+  const full = document.createElement("canvas");
+  full.width = GAME_WIDTH;
+  full.height = GAME_HEIGHT;
+  const c = full.getContext("2d")!;
+  c.drawImage(src(makeSky(scene, variant)), 0, 0);
+  const cloud = src(makeCloud(scene, variant));
+  for (const [x, y, s] of [[-80, 120, 1.3], [300, 220, 1.1], [420, 70, 1.4]] as const) {
+    c.globalAlpha = 0.75;
+    c.drawImage(cloud, x, y, 420 * s, 170 * s * 0.8);
+  }
+  c.globalAlpha = 1;
+  c.drawImage(src(makeSkyline(scene, horizon, "far").key), 0, 0);
+  if (variant === "morning" || variant === "garden") {
+    c.fillStyle = "rgba(90,102,130,0.55)";
+    c.fillRect(0, 0, GAME_WIDTH, horizon);
+  }
+  const building =
+    variant === "garden"
+      ? makeGarden(scene, horizon).key
+      : variant === "morning"
+        ? makeMainBuilding(scene, horizon).key
+        : variant === "hospital"
+          ? makeHospital(scene, horizon).key
+          : makeSkyline(scene, horizon, "near").key;
+  c.drawImage(src(building), 0, 0);
+  c.drawImage(src(makeGround(scene, horizon, variant)), 0, horizon);
+
+  // crop: keep the full width, take the lower part with the matching aspect
+  const sh = Math.min(GAME_HEIGHT, Math.round((GAME_WIDTH * h) / w));
+  const sy = Math.max(0, horizon + 90 - sh);
+  const tex = scene.textures.createCanvas(key, w, h)!;
+  tex.getContext().drawImage(full, 0, sy, GAME_WIDTH, sh, 0, 0, w, h);
+  tex.refresh();
+  return key;
+}

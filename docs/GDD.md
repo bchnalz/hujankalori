@@ -52,8 +52,12 @@ play system (later passes).
     middle (Bebas Neue: tall charcoal RSUD with cream SIDOARJO pairs in front,
     feet hidden by shrubs), ~40% shade (`?gdark=`).
   - 18–05 **IGD** (malam) — the IGD scene above.
-  The menu has a "Latar" chip row (Otomatis / IGD / GPT / Taman (versi 2015)), saved per
-  device (`hk_backdrop`). `?bg=city|hospital|morning|garden` overrides it.
+  The menu's **PILIH LOKASI BERMAIN** button opens a popup carousel
+  (`src/ui/LocationPicker.ts`): one card per option (Otomatis / IGD / GPT /
+  Taman (versi 2015)) with a live thumbnail of the scene, its time slot,
+  swipe or left/right arrows, page dots and a PILIH button; slide, bump,
+  open/close and confirm all have SFX. The choice is saved per device
+  (`hk_backdrop`). `?bg=city|hospital|morning|garden` overrides it.
 - **Character** (`src/objects/CharacterArt.ts`): larger art (176 px) with a
   drawn face that follows the idle bob and reacts — happy (activity), chewing
   (healthy), shocked + red flash (heavy food), panicking with a sweat drop when

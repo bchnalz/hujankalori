@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { addBackdrop, resolveBackdrop } from "../ui/Backdrop";
-import { BACKDROP_CHOICES, BACKDROP_LABEL, backdropForNow, FONT_UI, type BackdropChoice } from "../config/theme";
+import { BACKDROP_LABEL, FONT_UI } from "../config/theme";
+import { openLocationPicker } from "../ui/LocationPicker";
 import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_WIDTH } from "../config/gameConfig";
 import { UI } from "../config/assetManifest";
@@ -92,18 +93,30 @@ export class MenuScene extends Phaser.Scene {
       color: 0x37406b,
     });
 
-    this.makeBackdropPicker(1212);
+    this.makeLocationButton(1206);
 
     addFullscreenToggle(this, GAME_WIDTH - 56, 56);
     addMuteToggle(this, 56, 56);
   }
 
-  /** Row of chips to pick the scenery: Otomatis (by WIB clock) / IGD / GPT / Taman (versi 2015). */
-  private makeBackdropPicker(y: number): void {
-    const current = getBackdropChoice();
-    const auto = BACKDROP_LABEL[backdropForNow() as BackdropChoice];
+  /** "Pilih lokasi bermain" button opening the scenery carousel popup. */
+  private makeLocationButton(y: number): void {
+    makeButton(
+      this,
+      GAME_WIDTH / 2,
+      y,
+      "PILIH LOKASI BERMAIN",
+      () =>
+        openLocationPicker(this, (c) => {
+          if (c === getBackdropChoice()) return;
+          saveBackdropChoice(c);
+          this.cameras.main.fadeOut(180, 0, 0, 0);
+          this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart());
+        }),
+      { width: 580, height: 70, fontSize: 30, color: 0x2a8f86 },
+    );
     this.add
-      .text(GAME_WIDTH / 2, y - 50, current === "auto" ? `Latar: otomatis sesuai jam (${auto})` : "Latar", {
+      .text(GAME_WIDTH / 2, y - 58, `Lokasi: ${BACKDROP_LABEL[getBackdropChoice()]}`, {
         fontFamily: FONT_UI,
         fontSize: "20px",
         color: "#c9d4ec",
@@ -112,43 +125,6 @@ export class MenuScene extends Phaser.Scene {
         strokeThickness: 5,
       })
       .setOrigin(0.5);
-    const H = 50;
-    const gap = 12;
-    // chip width follows its label
-    const widths = BACKDROP_CHOICES.map((c) => {
-      const t = this.add.text(0, 0, BACKDROP_LABEL[c], { fontFamily: FONT_UI, fontSize: "22px", fontStyle: "bold" });
-      const w = Math.ceil(t.width) + 40;
-      t.destroy();
-      return w;
-    });
-    let x = GAME_WIDTH / 2 - (widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1)) / 2;
-    BACKDROP_CHOICES.forEach((c, i) => {
-      const W = widths[i];
-      x += W / 2;
-      const on = c === current;
-      const g = this.add.graphics();
-      g.fillStyle(on ? 0x1b3a2a : 0x0b1020, on ? 0.92 : 0.7);
-      g.fillRoundedRect(x - W / 2, y - H / 2, W, H, 25);
-      g.lineStyle(on ? 4 : 2, on ? 0x7cfc8a : 0x2a3450, 1);
-      g.strokeRoundedRect(x - W / 2, y - H / 2, W, H, 25);
-      this.add
-        .text(x, y, BACKDROP_LABEL[c], {
-          fontFamily: FONT_UI,
-          fontSize: "22px",
-          color: on ? "#7CFC8A" : "#c9d4ec",
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5);
-      const hit = this.add.zone(x, y, W, H + 16).setInteractive({ useHandCursor: true });
-      hit.on("pointerup", () => {
-        if (c === getBackdropChoice()) return;
-        Sfx.click();
-        saveBackdropChoice(c);
-        this.cameras.main.fadeOut(160, 0, 0, 0);
-        this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart());
-      });
-      x += W / 2 + gap;
-    });
   }
 
   private makeCard(gender: Gender, x: number, label: string): void {

@@ -460,6 +460,21 @@ class SfxEngine {
     this.tone(1200, t + 0.05, 0.06, { type: "triangle", vol: 0.06 });
   }
 
+  /** Carousel card sliding by (dir: +1 next, -1 previous). */
+  slide(dir = 1): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.16, { filter: "bandpass", freq: dir > 0 ? 900 : 1800, freqTo: dir > 0 ? 1800 : 900, q: 1.6, vol: 0.14, attack: 0.02 });
+    this.tone(dir > 0 ? 660 : 880, t + 0.05, 0.07, { type: "triangle", vol: 0.1, to: dir > 0 ? 880 : 660 });
+  }
+
+  /** Soft bump when the carousel can't go further. */
+  bump(): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.tone(180, t, 0.1, { type: "sine", vol: 0.22, to: 120 });
+  }
+
   /** Soft clock tick (hunger demo). */
   tick(): void {
     if (!this.ready()) return;
