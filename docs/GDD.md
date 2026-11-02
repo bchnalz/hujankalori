@@ -43,16 +43,16 @@ play system (later passes).
   never competes with the player or the items.
 - **Three RSUD scenes by time of day** (WIB), picked once per session and kept
   for every screen:
-  - 05–11 **Pagi mendung** — the classical main building (maroon hip roof with
+  - 05–11 **GPT** (pagi mendung) — the classical main building (maroon hip roof with
     dormers, two domed corner towers, arched windows, iron balconies) under a
     dark overcast sky, ~40% shade (`?mdark=`), a few warm lit rooms, mist.
-  - 11–18 **Sore hujan** — the front garden: cypress trees, the ward building
+  - 11–18 **Taman (versi 2015)** (sore hujan) — the front garden: cypress trees, the ward building
     with a red cross, the pendopo with red lanterns, shade trees, a log planter,
     river stones, a wet lawn, and the "RSUD SIDOARJO" letter monument in the
     middle (Bebas Neue: tall charcoal RSUD with cream SIDOARJO pairs in front,
     feet hidden by shrubs), ~40% shade (`?gdark=`).
-  - 18–05 **Malam** — the IGD scene above.
-  The menu has a "Latar" chip row (Otomatis / Pagi / Sore / Malam), saved per
+  - 18–05 **IGD** (malam) — the IGD scene above.
+  The menu has a "Latar" chip row (Otomatis / IGD / GPT / Taman (versi 2015)), saved per
   device (`hk_backdrop`). `?bg=city|hospital|morning|garden` overrides it.
 - **Character** (`src/objects/CharacterArt.ts`): larger art (176 px) with a
   drawn face that follows the idle bob and reacts — happy (activity), chewing

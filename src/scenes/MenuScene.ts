@@ -98,7 +98,7 @@ export class MenuScene extends Phaser.Scene {
     addMuteToggle(this, 56, 56);
   }
 
-  /** Row of chips to pick the scenery: Otomatis (by WIB clock) / Pagi / Sore / Malam. */
+  /** Row of chips to pick the scenery: Otomatis (by WIB clock) / IGD / GPT / Taman (versi 2015). */
   private makeBackdropPicker(y: number): void {
     const current = getBackdropChoice();
     const auto = BACKDROP_LABEL[backdropForNow() as BackdropChoice];
@@ -112,12 +112,19 @@ export class MenuScene extends Phaser.Scene {
         strokeThickness: 5,
       })
       .setOrigin(0.5);
-    const W = 152;
     const H = 50;
     const gap = 12;
-    const x0 = GAME_WIDTH / 2 - (BACKDROP_CHOICES.length * W + (BACKDROP_CHOICES.length - 1) * gap) / 2 + W / 2;
+    // chip width follows its label
+    const widths = BACKDROP_CHOICES.map((c) => {
+      const t = this.add.text(0, 0, BACKDROP_LABEL[c], { fontFamily: FONT_UI, fontSize: "22px", fontStyle: "bold" });
+      const w = Math.ceil(t.width) + 40;
+      t.destroy();
+      return w;
+    });
+    let x = GAME_WIDTH / 2 - (widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1)) / 2;
     BACKDROP_CHOICES.forEach((c, i) => {
-      const x = x0 + i * (W + gap);
+      const W = widths[i];
+      x += W / 2;
       const on = c === current;
       const g = this.add.graphics();
       g.fillStyle(on ? 0x1b3a2a : 0x0b1020, on ? 0.92 : 0.7);
@@ -140,6 +147,7 @@ export class MenuScene extends Phaser.Scene {
         this.cameras.main.fadeOut(160, 0, 0, 0);
         this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart());
       });
+      x += W / 2 + gap;
     });
   }
 

@@ -22,12 +22,12 @@ export const BACKDROP: BackdropVariant = "hospital";
 
 /** What the player picked on the menu: follow the clock, or a fixed scene. */
 export type BackdropChoice = "auto" | "morning" | "garden" | "hospital";
-export const BACKDROP_CHOICES: BackdropChoice[] = ["auto", "morning", "garden", "hospital"];
+export const BACKDROP_CHOICES: BackdropChoice[] = ["auto", "hospital", "morning", "garden"];
 export const BACKDROP_LABEL: Record<BackdropChoice, string> = {
   auto: "Otomatis",
-  morning: "Pagi",
-  garden: "Sore",
-  hospital: "Malam",
+  hospital: "IGD",
+  morning: "GPT",
+  garden: "Taman (versi 2015)",
 };
 
 /**
