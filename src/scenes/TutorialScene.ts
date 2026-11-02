@@ -18,7 +18,7 @@ type Step = "move" | "activity" | "hunger" | "food" | "done";
 type Mood = "happy" | "sad" | "wow";
 
 const STEPS: Step[] = ["move", "activity", "hunger", "food", "done"];
-const PANEL_Y = 272;
+const PANEL_Y = 290;
 const PANEL_H = 170;
 const HUNGER_TOTAL = 12;
 
@@ -129,7 +129,7 @@ export class TutorialScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.items, (_p, it) => this.onCatch(it as FallingItem), undefined, this);
 
     this.buildCoach();
-    addMuteToggle(this, 60, 150);
+    addMuteToggle(this, 60, 172);
 
     this.skipBtn = makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 90, "Sudah paham? Lewati ›", () => this.finish(), {
       width: 420,
@@ -239,14 +239,14 @@ export class TutorialScene extends Phaser.Scene {
         break;
       case "activity":
         this.say("Tangkap OLAHRAGA (yang bergelembung). Batas kalorimu bertambah!", "wow");
-        this.highlightRect(16, 20, GAME_WIDTH - 32, 50, 12);
+        this.highlightRect(12, 12, GAME_WIDTH - 24, 74, 18);
         this.spawn(this.pick("activity"), 420);
         break;
       case "hunger":
         this.hunger = HUNGER_TOTAL;
         this.setStarveVisible(true);
         this.say("Ini timer LAPAR. Kalau habis, kamu pingsan! Makan yang sehat untuk mengisinya.", "wow");
-        this.highlightRect(GAME_WIDTH - 172, 82, 152, 172, 76);
+        this.highlightRect(GAME_WIDTH - 172, 106, 152, 172, 76);
         this.spawn(this.pick("healthy"), 230);
         break;
       case "food":

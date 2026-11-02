@@ -1,10 +1,10 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, gameConfig } from "../config/gameConfig";
 
-const BAR_X = 24;
-const BAR_Y = 28;
-const BAR_W = GAME_WIDTH - 48;
-const BAR_H = 34;
+export const BAR_X = 20;
+export const BAR_Y = 20;
+export const BAR_W = GAME_WIDTH - 40;
+export const BAR_H = 58;
 
 /**
  * In-game heads-up display: HP bar (dynamic, drawn with Graphics) + numeric HP
@@ -23,15 +23,17 @@ export class Hud {
     this.hpText = scene.add
       .text(BAR_X + BAR_W / 2, BAR_Y + BAR_H / 2, "", {
         fontFamily: "system-ui, sans-serif",
-        fontSize: "22px",
+        fontSize: "30px",
         color: "#ffffff",
         fontStyle: "bold",
+        stroke: "#0b1020",
+        strokeThickness: 5,
       })
       .setOrigin(0.5)
       .setDepth(102);
 
     this.timeText = scene.add
-      .text(GAME_WIDTH / 2, BAR_Y + BAR_H + 28, "", {
+      .text(GAME_WIDTH / 2, BAR_Y + BAR_H + 30, "", {
         fontFamily: "system-ui, sans-serif",
         fontSize: "30px",
         color: "#e8f0ff",
@@ -50,7 +52,7 @@ export class Hud {
 
     this.bg.clear();
     this.bg.fillStyle(0x000000, 0.45);
-    this.bg.fillRoundedRect(BAR_X - 4, BAR_Y - 4, BAR_W + 8, BAR_H + 8, 10);
+    this.bg.fillRoundedRect(BAR_X - 5, BAR_Y - 5, BAR_W + 10, BAR_H + 10, 16);
 
     let color = 0x4caf50;
     if (ratio < 0.25) color = 0xe53935;
@@ -58,10 +60,13 @@ export class Hud {
 
     this.bar.clear();
     this.bar.fillStyle(0x10131c, 1);
-    this.bar.fillRoundedRect(BAR_X, BAR_Y, BAR_W, BAR_H, 8);
+    this.bar.fillRoundedRect(BAR_X, BAR_Y, BAR_W, BAR_H, 12);
     if (ratio > 0) {
       this.bar.fillStyle(color, 1);
-      this.bar.fillRoundedRect(BAR_X, BAR_Y, Math.max(8, BAR_W * ratio), BAR_H, 8);
+      this.bar.fillRoundedRect(BAR_X, BAR_Y, Math.max(24, BAR_W * ratio), BAR_H, 12);
+      // subtle top shine
+      this.bar.fillStyle(0xffffff, 0.16);
+      this.bar.fillRoundedRect(BAR_X + 6, BAR_Y + 6, Math.max(12, BAR_W * ratio - 12), BAR_H * 0.28, 8);
     }
 
     this.hpText.setText(`Batas Kalori: ${Math.ceil(hp)} / ${gameConfig.maxHp}`);

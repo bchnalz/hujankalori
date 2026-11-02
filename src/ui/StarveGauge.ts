@@ -1,9 +1,12 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, gameConfig } from "../config/gameConfig";
 
-const CX = GAME_WIDTH - 96;
-const CY = 156;
-const R = 60;
+export const STARVE_CX = GAME_WIDTH - 96;
+export const STARVE_CY = 180;
+export const STARVE_R = 60;
+const CX = STARVE_CX;
+const CY = STARVE_CY;
+const R = STARVE_R;
 
 /**
  * Pie/radial countdown for the starvation timer (GAME mechanic: eat within N
@@ -36,6 +39,12 @@ export class StarveGauge {
       })
       .setOrigin(0.5)
       .setDepth(102);
+  }
+
+  setAlpha(a: number): void {
+    this.g.setAlpha(a);
+    this.num.setAlpha(a);
+    this.label.setAlpha(a);
   }
 
   update(remaining: number, total: number): void {
