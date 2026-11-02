@@ -295,6 +295,7 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(130));
+    t.x = Phaser.Math.Clamp(t.x, t.width / 2 + 24, GAME_WIDTH - t.width / 2 - 24);
     t.setScale(1.8);
     this.tweens.add({ targets: t, scale: 1, duration: 260, ease: "Back.easeOut" });
     this.tweens.add({ targets: t, y: t.y - 70, alpha: 0, delay: 500, duration: 450, onComplete: () => t.destroy() });
@@ -308,7 +309,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.comboBadge, scale: 1, duration: 200, ease: "Back.easeOut" });
 
     if (n % 5 === 0) {
-      const words = ["MANTAP!", "LUAR BIASA!", "TAK TERBENDUNG!", "LEGENDA!"];
+      const words = ["NTAP!", "AURA FARMING!", "LET HIM COOK!", "KING!", "MASIH LANJUT?!", "G.O.A.T.!"];
       const big = this.add
         .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, words[Math.min(n / 5 - 1, words.length - 1)], {
           fontFamily: "system-ui, sans-serif",
@@ -320,10 +321,12 @@ export class GameScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setDepth(135)
-        .setScale(0.3)
         .setAlpha(0);
-      this.tweens.add({ targets: big, scale: 1, alpha: 1, duration: 300, ease: "Back.easeOut" });
-      this.tweens.add({ targets: big, alpha: 0, scale: 1.2, delay: 750, duration: 350, onComplete: () => big.destroy() });
+      // Always fit inside the screen (the end pop grows 10%, so keep room for it).
+      const fit = Math.min(1, (GAME_WIDTH - 80) / (big.width * 1.1));
+      big.setScale(fit * 0.3);
+      this.tweens.add({ targets: big, scale: fit, alpha: 1, duration: 300, ease: "Back.easeOut" });
+      this.tweens.add({ targets: big, alpha: 0, scale: fit * 1.1, delay: 750, duration: 350, onComplete: () => big.destroy() });
       this.cameras.main.flash(160, 255, 230, 140);
     }
   }
@@ -342,6 +345,7 @@ export class GameScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setDepth(130);
+      t.x = Phaser.Math.Clamp(t.x, t.width / 2 + 24, GAME_WIDTH - t.width / 2 - 24);
       this.tweens.add({ targets: t, y: t.y + 40, alpha: 0, delay: 350, duration: 450, onComplete: () => t.destroy() });
     }
     this.combo = 0;
