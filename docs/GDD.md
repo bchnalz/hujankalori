@@ -46,7 +46,7 @@ play system (later passes).
   - 05–11 **GPT** (pagi mendung) — the classical main building (maroon hip roof with
     dormers, two domed corner towers, arched windows, iron balconies) under a
     dark overcast sky, ~40% shade (`?mdark=`), a few warm lit rooms, mist.
-  - 11–18 **Taman (versi 2015)** (sore hujan) — the front garden: cypress trees, the ward building
+  - 11–18 **Taman (versi 2015)** (sore hujan) — the central garden in the middle of the hospital: cypress trees, the ward building
     with a red cross, the pendopo with red lanterns, shade trees, a log planter,
     river stones, a wet lawn, and the "RSUD SIDOARJO" letter monument in the
     middle (Bebas Neue: tall charcoal RSUD with cream SIDOARJO pairs in front,
