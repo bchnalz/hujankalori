@@ -252,6 +252,20 @@ function makeGround(scene: Phaser.Scene, horizon: number, variant: BackdropVaria
   return key;
 }
 
+/** 0..1 — how much the IGD building is pushed into night shadow (URL: ?dark=0.6). */
+const HOSPITAL_DARKNESS = (() => {
+  try {
+    const v = Number(new URLSearchParams(window.location.search).get("dark"));
+    if (Number.isFinite(v) && v >= 0 && v <= 0.95 && new URLSearchParams(window.location.search).has("dark")) return v;
+  } catch {
+    /* ignore */
+  }
+  return 0.6;
+})();
+
+/** Extra shade on the ambulance on top of the building's night pass. */
+const AMBULANCE_EXTRA_DARK = 0.15;
+
 /** Points used for animated details on the IGD backdrop. */
 interface HospitalLayout {
   key: string;
@@ -267,15 +281,15 @@ interface HospitalLayout {
  * sign, an orange ground-floor band, the tensile drop-off canopy, an
  * ambulance, plants and street lamps.
  */
-function makeHospital(scene: Phaser.Scene, horizon: number): HospitalLayout {
-  const key = `__bd_igd_${horizon}`;
+function makeHospital(scene: Phaser.Scene, horizon: number, darkness = HOSPITAL_DARKNESS): HospitalLayout {
+  const key = `__bd_igd_${horizon}_${darkness}`;
   const metaKey = `${key}_meta`;
   if (scene.textures.exists(key)) {
     const m = scene.registry.get(metaKey) as HospitalLayout | undefined;
     return m ?? { key, windows: [], lights: [] };
   }
   const tex = scene.textures.createCanvas(key, GAME_WIDTH, horizon)!;
-  const ctx = tex.getContext();
+  let ctx: CanvasRenderingContext2D = tex.getContext();
   const base = horizon;
   const r = rng(21);
   const windows: Win[] = [];
@@ -417,6 +431,7 @@ function makeHospital(scene: Phaser.Scene, horizon: number): HospitalLayout {
 
   // red neon "IGD"
   const igdX = 318;
+  const neon = (): void => {
   ctx.save();
   ctx.font = font(800, 70);
   ctx.textAlign = "center";
@@ -430,6 +445,8 @@ function makeHospital(scene: Phaser.Scene, horizon: number): HospitalLayout {
   ctx.globalAlpha = 0.35;
   ctx.fillText("IGD", igdX, mTop + 80);
   ctx.restore();
+  };
+  neon();
   scene.registry.set("__bd_hospital_x", igdX);
 
   // ---- ground floor: orange band, entrance, doors
@@ -479,6 +496,13 @@ function makeHospital(scene: Phaser.Scene, horizon: number): HospitalLayout {
     ctx.fill();
   };
   lamp(112);
+  const lampGlow = (x: number): void => {
+    const g = ctx.createRadialGradient(x + 18, base - 152, 2, x + 18, base - 152, 46);
+    g.addColorStop(0, "rgba(255,226,170,0.9)");
+    g.addColorStop(1, "rgba(255,226,170,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 40, base - 200, 120, 100);
+  };
 
   // ---- tensile canopy over the drop-off
   const A = { x: 360, y: base - 158 };
@@ -555,7 +579,12 @@ function makeHospital(scene: Phaser.Scene, horizon: number): HospitalLayout {
     ctx.fill();
   }
 
-  // ---- ambulance
+  // ---- ambulance (drawn on its own layer so it can sit deeper in shadow)
+  const mainCtx = ctx;
+  const ambCanvas = document.createElement("canvas");
+  ambCanvas.width = GAME_WIDTH;
+  ambCanvas.height = horizon;
+  ctx = ambCanvas.getContext("2d")!;
   const ax = 520;
   const aw = 186;
   const ah = 86;
@@ -625,6 +654,26 @@ function makeHospital(scene: Phaser.Scene, horizon: number): HospitalLayout {
   // light bar
   ctx.fillStyle = "#2a3048";
   ctx.fillRect(ax + 72, aTop - 8, 46, 8);
+  ctx = mainCtx;
+
+  // Night pass: darken everything painted so far (sky stays untouched), then
+  // put back the light sources so they still read as lit.
+  if (darkness > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = `rgba(6,10,24,${darkness})`;
+    ctx.fillRect(0, 0, GAME_WIDTH, horizon);
+    ctx.restore();
+    neon();
+    lampGlow(112);
+  }
+  // ambulance: extra shade so it doesn't compete with the player and items
+  const ambDark = Math.min(0.9, darkness + AMBULANCE_EXTRA_DARK);
+  const actx = ambCanvas.getContext("2d")!;
+  actx.globalCompositeOperation = "source-atop";
+  actx.fillStyle = `rgba(6,10,24,${ambDark})`;
+  actx.fillRect(0, 0, GAME_WIDTH, horizon);
+  ctx.drawImage(ambCanvas, 0, 0);
   const lights = [
     { x: ax + 82, y: aTop - 5 },
     { x: ax + 108, y: aTop - 5 },
@@ -690,14 +739,15 @@ export function addBackdrop(scene: Phaser.Scene, opts: BackdropOpts = {}): void 
       const on = phase % 2 === 0;
       const red = on ? a : b;
       const blue = on ? b : a;
-      bar.fillStyle(0xff3030, 0.35).fillCircle(red.x, red.y, 26);
-      bar.fillStyle(0xff5050, 1).fillCircle(red.x, red.y, 6);
-      bar.fillStyle(0x3a7bff, 0.35).fillCircle(blue.x, blue.y, 26);
-      bar.fillStyle(0x5a95ff, 0.5).fillCircle(blue.x, blue.y, 5);
+      // small and dim: a hint of the siren, not a distraction
+      bar.fillStyle(0xff3030, 0.15).fillCircle(red.x, red.y, 14);
+      bar.fillStyle(0xff5050, 0.65).fillCircle(red.x, red.y, 3.8);
+      bar.fillStyle(0x3a7bff, 0.13).fillCircle(blue.x, blue.y, 14);
+      bar.fillStyle(0x5a95ff, 0.38).fillCircle(blue.x, blue.y, 3.3);
       phase++;
     };
     drawBar();
-    scene.time.addEvent({ delay: 260, loop: true, callback: drawBar });
+    scene.time.addEvent({ delay: 480, loop: true, callback: drawBar });
   } else {
     near = makeSkyline(scene, horizon, "near");
     scene.add.image(0, 0, near.key).setOrigin(0).setDepth(-7);

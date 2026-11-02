@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import type { ItemDef } from "../config/itemConfig";
 import { gameConfig } from "../config/gameConfig";
+import { GLOW_TUNING, ensureGlowTexture, ensureTrailTexture, sparkEmitter } from "./ItemGlow";
 
 const FLOAT = gameConfig.item.floaty;
 
@@ -9,12 +10,68 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
   private readonly floaty: boolean;
   private bubble?: Phaser.GameObjects.Arc;
   private swayPhase = 0;
+  private glow?: Phaser.GameObjects.Image;
+  private trail?: Phaser.GameObjects.Image;
+  private sparkClock = 0;
 
   constructor(scene: Phaser.Scene, x: number, def: ItemDef) {
     super(scene, x, -gameConfig.item.size, def.key);
     this.def = def;
     this.floaty = (FLOAT.types as readonly string[]).includes(def.type);
     this.setData("collected", false);
+
+    // neon outline + light trail, colour-coded by item type
+    this.glow = scene.add
+      .image(x, this.y, ensureGlowTexture(scene, def.key, def.type))
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(1);
+    this.trail = scene.add
+      .image(x, this.y, ensureTrailTexture(scene, def.type))
+      .setOrigin(0.5, 1)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(GLOW_TUNING.trailAlpha);
+    scene.tweens.add({
+      targets: this.glow,
+      alpha: GLOW_TUNING.pulseMin,
+      duration: GLOW_TUNING.pulseMs,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+      delay: Math.random() * GLOW_TUNING.pulseMs,
+    });
+    this.sparkClock = Math.random() * GLOW_TUNING.sparkEveryMs;
+    // Sync after Arcade physics has moved the sprite (postupdate), so the glow
+    // never lags behind the item even when a frame is slow.
+    scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.onPostUpdate, this);
+  }
+
+  private onPostUpdate(_time: number, delta: number): void {
+    if (this.active) this.syncGlow(delta);
+  }
+
+  private syncGlow(delta: number): void {
+    const d = this.depth;
+    if (this.bubble) this.bubble.setPosition(this.x, this.y);
+    if (this.glow) {
+      this.glow.setPosition(this.x, this.y).setRotation(this.rotation).setScale(this.scaleX, this.scaleY).setDepth(d - 0.05);
+    }
+    if (this.trail) {
+      this.trail
+        .setPosition(this.x, this.y - this.displayHeight * 0.3)
+        .setScale(Math.max(0.6, this.displayWidth / 96), 1)
+        .setDepth(d - 0.06);
+    }
+    // a few light sparks around the item
+    this.sparkClock -= delta;
+    if (this.sparkClock <= 0) {
+      this.sparkClock += GLOW_TUNING.sparkEveryMs;
+      const r = this.displayWidth * 0.45;
+      sparkEmitter(this.scene, this.def.type).emitParticleAt(
+        this.x + Phaser.Math.Between(-r, r),
+        this.y + Phaser.Math.Between(-r, r),
+        1,
+      );
+    }
   }
 
   /**
@@ -83,6 +140,11 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy(fromScene?: boolean): void {
+    this.scene?.events.off(Phaser.Scenes.Events.POST_UPDATE, this.onPostUpdate, this);
+    this.glow?.destroy();
+    this.glow = undefined;
+    this.trail?.destroy();
+    this.trail = undefined;
     if (this.bubble) {
       this.bubble.destroy();
       this.bubble = undefined;
