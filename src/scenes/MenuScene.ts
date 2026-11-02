@@ -1,12 +1,12 @@
 import Phaser from "phaser";
-import { addBackdrop } from "../ui/Backdrop";
-import { FONT_UI } from "../config/theme";
+import { addBackdrop, resolveBackdrop } from "../ui/Backdrop";
+import { BACKDROP_CHOICES, BACKDROP_LABEL, backdropForNow, FONT_UI, type BackdropChoice } from "../config/theme";
 import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_WIDTH } from "../config/gameConfig";
 import { UI } from "../config/assetManifest";
 import { PLAYER_BASES } from "../config/playerConfig";
 import type { GameUser, Gender } from "../data/types";
-import { isTutorialDone, saveGender } from "../data/prefs";
+import { getBackdropChoice, isTutorialDone, saveBackdropChoice, saveGender } from "../data/prefs";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { addFullscreenToggle } from "../ui/FullscreenToggle";
@@ -32,6 +32,7 @@ export class MenuScene extends Phaser.Scene {
 
     const user = this.registry.get("user") as GameUser;
 
+    resolveBackdrop(this);
     addBackdrop(this, { horizon: 1160, dim: 0.5 });
 
     new WeatherFx(this, {
@@ -91,8 +92,55 @@ export class MenuScene extends Phaser.Scene {
       color: 0x37406b,
     });
 
+    this.makeBackdropPicker(1212);
+
     addFullscreenToggle(this, GAME_WIDTH - 56, 56);
     addMuteToggle(this, 56, 56);
+  }
+
+  /** Row of chips to pick the scenery: Otomatis (by WIB clock) / Pagi / Sore / Malam. */
+  private makeBackdropPicker(y: number): void {
+    const current = getBackdropChoice();
+    const auto = BACKDROP_LABEL[backdropForNow() as BackdropChoice];
+    this.add
+      .text(GAME_WIDTH / 2, y - 50, current === "auto" ? `Latar: otomatis sesuai jam (${auto})` : "Latar", {
+        fontFamily: FONT_UI,
+        fontSize: "20px",
+        color: "#c9d4ec",
+        fontStyle: "bold",
+        stroke: "#070b18",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5);
+    const W = 152;
+    const H = 50;
+    const gap = 12;
+    const x0 = GAME_WIDTH / 2 - (BACKDROP_CHOICES.length * W + (BACKDROP_CHOICES.length - 1) * gap) / 2 + W / 2;
+    BACKDROP_CHOICES.forEach((c, i) => {
+      const x = x0 + i * (W + gap);
+      const on = c === current;
+      const g = this.add.graphics();
+      g.fillStyle(on ? 0x1b3a2a : 0x0b1020, on ? 0.92 : 0.7);
+      g.fillRoundedRect(x - W / 2, y - H / 2, W, H, 25);
+      g.lineStyle(on ? 4 : 2, on ? 0x7cfc8a : 0x2a3450, 1);
+      g.strokeRoundedRect(x - W / 2, y - H / 2, W, H, 25);
+      this.add
+        .text(x, y, BACKDROP_LABEL[c], {
+          fontFamily: FONT_UI,
+          fontSize: "22px",
+          color: on ? "#7CFC8A" : "#c9d4ec",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
+      const hit = this.add.zone(x, y, W, H + 16).setInteractive({ useHandCursor: true });
+      hit.on("pointerup", () => {
+        if (c === getBackdropChoice()) return;
+        Sfx.click();
+        saveBackdropChoice(c);
+        this.cameras.main.fadeOut(160, 0, 0, 0);
+        this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart());
+      });
+    });
   }
 
   private makeCard(gender: Gender, x: number, label: string): void {

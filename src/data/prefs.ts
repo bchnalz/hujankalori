@@ -1,9 +1,11 @@
 import type { Gender } from "./types";
+import { BACKDROP_CHOICES, type BackdropChoice } from "../config/theme";
 
 /** Small per-device preferences kept in localStorage (safe if unavailable). */
 
 const GENDER_KEY = "hk_gender";
 const TUTORIAL_KEY = "hk_tutorial_done";
+const BACKDROP_KEY = "hk_backdrop";
 
 function get(key: string): string | null {
   try {
@@ -36,4 +38,13 @@ export function isTutorialDone(): boolean {
 
 export function markTutorialDone(): void {
   set(TUTORIAL_KEY, "1");
+}
+
+export function getBackdropChoice(): BackdropChoice {
+  const v = get(BACKDROP_KEY) as BackdropChoice | null;
+  return v && BACKDROP_CHOICES.includes(v) ? v : "auto";
+}
+
+export function saveBackdropChoice(c: BackdropChoice): void {
+  set(BACKDROP_KEY, c);
 }

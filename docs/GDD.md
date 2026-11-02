@@ -40,8 +40,20 @@ play system (later passes).
   light bar, plants and a street lamp. The building gets a 60% night shade
   (`?dark=0..0.95` previews other levels) with the neon, lamp and siren kept lit;
   the ambulance sits deeper in shadow and its siren is small, dim and slow so it
-  never competes with the player or the items. Set `BACKDROP = "city"` for the generic
-  skyline; `?bg=city` / `?bg=hospital` in the URL overrides it for previews.
+  never competes with the player or the items.
+- **Three RSUD scenes by time of day** (WIB), picked once per session and kept
+  for every screen:
+  - 05–11 **Pagi mendung** — the classical main building (maroon hip roof with
+    dormers, two domed corner towers, arched windows, iron balconies) under a
+    dark overcast sky, ~40% shade (`?mdark=`), a few warm lit rooms, mist.
+  - 11–18 **Sore hujan** — the front garden: cypress trees, the ward building
+    with a red cross, the pendopo with red lanterns, shade trees, a log planter,
+    river stones, a wet lawn, and the "RSUD SIDOARJO" letter monument in the
+    middle (Bebas Neue: tall charcoal RSUD with cream SIDOARJO pairs in front,
+    feet hidden by shrubs), ~40% shade (`?gdark=`).
+  - 18–05 **Malam** — the IGD scene above.
+  The menu has a "Latar" chip row (Otomatis / Pagi / Sore / Malam), saved per
+  device (`hk_backdrop`). `?bg=city|hospital|morning|garden` overrides it.
 - **Character** (`src/objects/CharacterArt.ts`): larger art (176 px) with a
   drawn face that follows the idle bob and reacts — happy (activity), chewing
   (healthy), shocked + red flash (heavy food), panicking with a sweat drop when
