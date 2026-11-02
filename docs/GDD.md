@@ -32,6 +32,13 @@ play system (later passes).
   clouds, far/near skylines with lit windows (a few flicker) and a hospital with
   a glowing red cross, and a wet street with puddles, reflections and rain
   ripples. Lightning bolts strike behind the buildings.
+- **IGD backdrop** (default, `BACKDROP = "hospital"` in `src/config/theme.ts`):
+  the RSUD emergency building at night in the same style — cream facade with
+  glowing wavy blue window bands, red neon "IGD", blue glass wing with red floor
+  stripes and the "Accident & Emergency Department" sign, orange ground-floor
+  band, the tensile drop-off canopy, a parked ambulance with a flashing red/blue
+  light bar, plants and a street lamp. Set `BACKDROP = "city"` for the generic
+  skyline; `?bg=city` / `?bg=hospital` in the URL overrides it for previews.
 - **Character** (`src/objects/CharacterArt.ts`): larger art (176 px) with a
   drawn face that follows the idle bob and reacts — happy (activity), chewing
   (healthy), shocked + red flash (heavy food), panicking with a sweat drop when
