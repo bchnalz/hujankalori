@@ -75,7 +75,7 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     fadeInScene(this);
-    this.cameras.main.setZoom(1).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    this.cameras.main.removeBounds().setZoom(1).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
     this.hp = gameConfig.startHp;
     this.starveTotal = starveWindow(0);
     this.starveTimer = this.starveTotal;
@@ -281,14 +281,25 @@ export class GameScene extends Phaser.Scene {
         strokeThickness: 6,
       })
       .setOrigin(0, 0.5);
+    const unit = this.add
+      .text(0, 8, "kkal", {
+        fontFamily: FONT_UI,
+        fontSize: "22px",
+        color: t.css,
+        fontStyle: "bold",
+        stroke: "#0b1020",
+        strokeThickness: 4,
+      })
+      .setOrigin(0, 0.5);
     const textW = Math.max(name.width, tag.width);
     const cardX = ICON_R - 4; // card starts under the badge
-    const cardW = ICON_R + 18 + textW + 24 + kcal.width + 34;
+    const cardW = ICON_R + 18 + textW + 24 + kcal.width + 6 + unit.width + 34;
     const total = cardX + cardW;
     const left = -total / 2;
     name.x = left + cardX + ICON_R + 18;
     tag.x = name.x;
     kcal.x = name.x + textW + 24;
+    unit.x = kcal.x + kcal.width + 6;
 
     const card = this.add.graphics();
     card.fillStyle(0x000000, 0.35).fillRoundedRect(left + cardX, -CARD_H / 2 + 8, cardW, CARD_H, CARD_H / 2);
@@ -303,7 +314,7 @@ export class GameScene extends Phaser.Scene {
     card.lineStyle(4, t.col, 1).strokeCircle(bx, 0, ICON_R);
     const icon = this.add.image(bx, 0, textureKey).setDisplaySize(92, 92);
 
-    const row = this.add.container(GAME_WIDTH / 2, ROW1, [card, icon, name, tag, kcal]).setDepth(120);
+    const row = this.add.container(GAME_WIDTH / 2, ROW1, [card, icon, name, tag, kcal, unit]).setDepth(120);
 
     // push older rows down
     this.feed = this.feed.filter((r) => r.active);
@@ -624,12 +635,20 @@ export class GameScene extends Phaser.Scene {
     // dramatic beat: flash, punch-in zoom on the player, defeated face
     this.player.art.setExpression(reason === "starve" ? "dizzy" : "full");
     this.player.art.squash(0.22);
+    // HUD and feed step aside so the shot is just the character and the scene
+    this.children.list.forEach((o) => {
+      const d = (o as unknown as { depth: number }).depth;
+      if (d >= 100 && d < 500) this.tweens.add({ targets: o, alpha: 0, duration: 220 });
+    });
     const cam = this.cameras.main;
+    // Keep the view inside the scene so zooming on a player at the screen edge
+    // never shows empty space beside it.
+    cam.setBounds(0, 0, GAME_WIDTH, GAME_HEIGHT);
     cam.flash(180, 255, 255, 255);
-    cam.shake(260, 0.01);
-    cam.zoomTo(1.12, 500, "Quad.easeOut");
-    cam.pan(this.player.x, this.player.y - 40, 500, "Quad.easeOut");
-    this.time.delayedCall(1200, () => {
+    cam.shake(200, 0.004);
+    cam.zoomTo(2, 650, "Cubic.easeOut");
+    cam.pan(this.player.x, this.player.y - 60, 650, "Cubic.easeOut");
+    this.time.delayedCall(1400, () => {
       goTo(this, "GameOver", { survivalSeconds: elapsed, reason, sid: this.runSid });
     });
   }
