@@ -35,7 +35,7 @@ const DESC: Record<BackdropChoice, string> = {
   auto: "Lokasi berganti mengikuti jam (WIB)",
   hospital: "Gedung IGD di malam hari",
   morning: "Gedung GPT di pagi mendung",
-  garden: "Taman di tengah RSUD di sore hujan",
+  garden: "Taman tengah RSUD saat sore hujan",
 };
 
 const SLOT_TEXT: Record<BackdropChoice, string> = {
