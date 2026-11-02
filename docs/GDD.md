@@ -73,8 +73,21 @@ play system (later passes).
 - **Particles** (`src/ui/Fx.ts`): star bursts for good catches, red bits and
   crumbs for heavy food, splashes when items hit the street, confetti on a new
   record; items pop in as they appear.
-- **HUD**: drops leave a light "melting" segment on the calorie bar and the
-  number rolls; gains flash the bar.
+- **HUD** (`src/ui/Hud.ts`, `StarveGauge.ts`): one dark glass panel at the top —
+  round sound/pause buttons on the left, the calorie gauge in the middle
+  ("BATAS KALORI", big rolling number, 8 segments, a hatched red danger zone
+  for the last 20%, green → amber → red by state) and the hunger donut as a
+  neon ring on the right (LAPAR → MAKAN! when low). The survival timer is big
+  and centred under the panel.
+  - Drop: a light "melting" segment holds then drains, the bar shakes, red
+    sparks chip off its end and "−N" pops under it (big drops add a soft SFX).
+  - Gain: the bar grows smoothly with a shimmer sweep, green sparkles, "+N"
+    and a short sparkle SFX.
+  - Danger zone: the bar glow pulses and the label becomes "⚠ HAMPIR KENYANG!".
+- **Catch feed** (bottom): a rounded card per catch — big item icon in a
+  glowing badge, the name, its type (AKTIVITAS / MAKANAN SEHAT / MAKANAN
+  BERAT) and the calorie change, all in the type colour; the previous card
+  shrinks and dims below it.
 - **Transitions**: scenes fade through night blue; the end of a run flashes and
   zooms onto the character before Game Over.
 - **Buttons**: raised style with a darker base that the face presses into.

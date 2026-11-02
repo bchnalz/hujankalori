@@ -2,10 +2,16 @@ import Phaser from "phaser";
 import { Sfx } from "../audio/Sfx";
 
 /** Speaker on/off button. The choice is remembered in localStorage by Sfx. */
-export function addMuteToggle(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Container {
-  const S = 72;
+export function addMuteToggle(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  opts: { size?: number; round?: boolean } = {},
+): Phaser.GameObjects.Container {
+  const S = opts.size ?? 72;
   const bg = scene.add.graphics();
-  bg.fillStyle(0x000000, 0.4).fillRoundedRect(-S / 2, -S / 2, S, S, 14);
+  if (opts.round) roundButtonBg(bg, S);
+  else bg.fillStyle(0x000000, 0.4).fillRoundedRect(-S / 2, -S / 2, S, S, 14);
 
   const icon = scene.add.graphics();
   const draw = (): void => {
@@ -31,6 +37,7 @@ export function addMuteToggle(scene: Phaser.Scene, x: number, y: number): Phaser
   };
   draw();
 
+  icon.setScale(S / 72);
   const container = scene.add.container(x, y, [bg, icon]).setSize(S, S).setDepth(300);
   container.setInteractive({ useHandCursor: true });
   container.on("pointerover", () => container.setScale(1.08));
@@ -42,4 +49,12 @@ export function addMuteToggle(scene: Phaser.Scene, x: number, y: number): Phaser
     draw();
   });
   return container;
+}
+
+/** Small round glass button background (HUD style). */
+export function roundButtonBg(g: Phaser.GameObjects.Graphics, S: number): void {
+  g.fillStyle(0x000000, 0.3).fillCircle(0, 3, S / 2);
+  g.fillStyle(0x1b2647, 0.95).fillCircle(0, 0, S / 2);
+  g.fillStyle(0xffffff, 0.07).fillCircle(0, -S * 0.12, S * 0.34);
+  g.lineStyle(2, 0xa0beff, 0.25).strokeCircle(0, 0, S / 2);
 }

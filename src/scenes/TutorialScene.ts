@@ -10,7 +10,7 @@ import { markTutorialDone } from "../data/prefs";
 import { Sfx } from "../audio/Sfx";
 import { Player } from "../objects/Player";
 import { FallingItem } from "../systems/FallingItem";
-import { Hud } from "../ui/Hud";
+import { Hud, PANEL_X as HUD_X, PANEL_Y as HUD_Y } from "../ui/Hud";
 import { StarveGauge } from "../ui/StarveGauge";
 import { WeatherFx } from "../ui/WeatherFx";
 import { makeButton } from "../ui/Button";
@@ -107,7 +107,7 @@ export class TutorialScene extends Phaser.Scene {
     this.items = this.physics.add.group();
     this.fx = new Fx(this);
     this.hud = new Hud(this);
-    this.hud.update(this.hp, 0);
+    this.hud.update(this.hp, 0, false);
     this.hud.setTimerVisible(false);
 
     // Hunger gauge exists from the start but stays hidden until its step.
@@ -132,7 +132,7 @@ export class TutorialScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.items, (_p, it) => this.onCatch(it as FallingItem), undefined, this);
 
     this.buildCoach();
-    addMuteToggle(this, 60, 172);
+    addMuteToggle(this, HUD_X + 38, HUD_Y + 33, { size: 50, round: true });
 
     this.skipBtn = makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 90, "Sudah paham? Lewati ›", () => this.finish(), {
       width: 420,

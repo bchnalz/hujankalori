@@ -35,7 +35,7 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
     return o;
   };
 
-  hud.update(0, 0);
+  hud.update(0, 0, false);
   hud.setTimerVisible(false);
   starve.update(HUNGER_DEMO_TOTAL, HUNGER_DEMO_TOTAL);
   starve.setAlpha(0);
@@ -99,12 +99,17 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   const drawMiniBar = (v: number): void => {
     const ratio = Phaser.Math.Clamp(v / gameConfig.maxHp, 0, 1);
     miniBar.clear();
-    miniBar.fillStyle(0x10131c, 1).fillRoundedRect(MINI_BAR_X, MINI_BAR_Y, MINI_BAR_W, MINI_BAR_H, 12);
+    const R = MINI_BAR_H / 2;
+    miniBar.fillStyle(0x070b16, 1).fillRoundedRect(MINI_BAR_X, MINI_BAR_Y, MINI_BAR_W, MINI_BAR_H, R);
     if (ratio > 0) {
-      miniBar.fillStyle(0x4caf50, 1).fillRoundedRect(MINI_BAR_X, MINI_BAR_Y, Math.max(20, MINI_BAR_W * ratio), MINI_BAR_H, 12);
-      miniBar.fillStyle(0xffffff, 0.16).fillRoundedRect(MINI_BAR_X + 6, MINI_BAR_Y + 5, Math.max(10, MINI_BAR_W * ratio - 12), MINI_BAR_H * 0.28, 8);
+      const w = Math.max(MINI_BAR_H, MINI_BAR_W * ratio);
+      miniBar.fillStyle(0x7cfc8a, 0.22).fillRoundedRect(MINI_BAR_X - 4, MINI_BAR_Y - 4, w + 8, MINI_BAR_H + 8, R + 4);
+      miniBar.fillStyle(0x43b047, 1).fillRoundedRect(MINI_BAR_X, MINI_BAR_Y, w, MINI_BAR_H, R);
+      miniBar.fillStyle(0x9dffab, 0.45).fillRoundedRect(MINI_BAR_X + 8, MINI_BAR_Y + 5, Math.max(8, w - 16), MINI_BAR_H * 0.26, 6);
     }
-    miniBar.lineStyle(3, 0x2a3450, 1).strokeRoundedRect(MINI_BAR_X, MINI_BAR_Y, MINI_BAR_W, MINI_BAR_H, 12);
+    miniBar.fillStyle(0x000000, 0.38);
+    for (let i = 1; i < 8; i++) miniBar.fillRect(MINI_BAR_X + (MINI_BAR_W * i) / 8 - 1, MINI_BAR_Y + 3, 2, MINI_BAR_H - 6);
+    miniBar.lineStyle(2, 0xffffff, 0.12).strokeRoundedRect(MINI_BAR_X, MINI_BAR_Y, MINI_BAR_W, MINI_BAR_H, R);
     miniBarText.setText(`${Math.round(v)} / ${gameConfig.maxHp} kkal`);
   };
   drawMiniBar(0);
@@ -113,29 +118,28 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   const miniDonut = scene.add.graphics().setAlpha(0);
   const miniDonutNum = scene.add
     .text(MINI_DONUT_X, MINI_DONUT_Y, "", {
-      fontFamily: FONT_UI,
-      fontSize: "34px",
+      fontFamily: FONT_DISPLAY,
+      fontSize: "36px",
       color: "#ffffff",
-      fontStyle: "bold",
     })
     .setOrigin(0.5)
     .setAlpha(0);
   const drawMiniDonut = (remaining: number): void => {
     const ratio = Phaser.Math.Clamp(remaining / HUNGER_DEMO_TOTAL, 0, 1);
     const low = remaining <= gameConfig.starvation.warnSeconds;
-    const color = low ? 0xe53935 : ratio < 0.5 ? 0xffb300 : 0x4caf50;
+    const color = low ? 0xff4526 : ratio < 0.5 ? 0xffc22e : 0x7cfc8a;
+    const ring = Math.max(8, MINI_DONUT_R * 0.24);
     miniDonut.clear();
-    miniDonut.fillStyle(0x10131c, 1).fillCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R);
+    miniDonut.fillStyle(0x070b16, 1).fillCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R);
+    miniDonut.lineStyle(ring, 0x1a2340, 1).strokeCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R - ring / 2);
     if (ratio > 0) {
       const start = -Math.PI / 2;
-      miniDonut.fillStyle(color, 1);
+      miniDonut.lineStyle(ring, color, 1);
       miniDonut.beginPath();
-      miniDonut.slice(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R, start, start + Math.PI * 2 * ratio, false);
-      miniDonut.closePath();
-      miniDonut.fillPath();
+      miniDonut.arc(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R - ring / 2, start, start + Math.PI * 2 * ratio, false);
+      miniDonut.strokePath();
     }
-    miniDonut.fillStyle(0x10131c, 1).fillCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R * 0.55);
-    miniDonut.lineStyle(3, 0x2a3450, 1).strokeCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R + 3);
+    miniDonut.lineStyle(3, color, 0.4).strokeCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R + 5);
     miniDonutNum.setText(`${Math.ceil(remaining)}`).setColor(low ? "#ff6b6b" : "#ffffff");
   };
   drawMiniDonut(HUNGER_DEMO_TOTAL);
@@ -190,11 +194,11 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
       duration: FILL_MS,
       ease: "Cubic.easeOut",
       onUpdate: () => {
-        hud.update(fill.v, 0);
+        hud.update(fill.v, 0, false);
         drawMiniBar(fill.v);
       },
       onComplete: () => {
-        hud.update(gameConfig.maxHp, 0);
+        hud.update(gameConfig.maxHp, 0, false);
         drawMiniBar(gameConfig.maxHp);
         scene.tweens.add({ targets: miniBarText, scale: 1.25, duration: 140, yoyo: true });
         Sfx.ding();

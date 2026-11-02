@@ -9,15 +9,21 @@ import { Player } from "../objects/Player";
 import { Spawner } from "../systems/Spawner";
 import { starveWindow } from "../systems/Difficulty";
 import { FallingItem } from "../systems/FallingItem";
-import { Hud } from "../ui/Hud";
+import { Hud, PANEL_H, PANEL_X, PANEL_Y } from "../ui/Hud";
 import { StarveGauge } from "../ui/StarveGauge";
 import { WeatherFx } from "../ui/WeatherFx";
-import { addMuteToggle } from "../ui/MuteToggle";
+import { addMuteToggle, roundButtonBg } from "../ui/MuteToggle";
+import type { ItemType } from "../config/itemConfig";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { startRun } from "../data/leaderboard";
 import { runBriefing } from "../ui/Briefing";
 import { Fx } from "../ui/Fx";
+
+/** HUD buttons sit inside the left end of the glass panel. */
+const HUD_BTN_X = PANEL_X + 38;
+const HUD_BTN_Y1 = PANEL_Y + 33;
+const HUD_BTN_Y2 = PANEL_Y + PANEL_H - 33;
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -160,11 +166,11 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(200);
 
-    this.hud.update(0, 0);
+    this.hud.update(0, 0, false);
     this.starve.update(this.starveTimer, this.starveTotal);
 
     this.comboBadge = this.add
-      .text(GAME_WIDTH / 2, 152, "", {
+      .text(GAME_WIDTH / 2, 262, "", {
         fontFamily: FONT_UI,
         fontSize: "28px",
         color: "#FFD54F",
@@ -185,8 +191,8 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    addMuteToggle(this, 60, 172);
-    this.addPauseButton(60, 258);
+    addMuteToggle(this, HUD_BTN_X, HUD_BTN_Y1, { size: 50, round: true });
+    this.addPauseButton(HUD_BTN_X, HUD_BTN_Y2);
 
     // Leaving the app/tab pauses the run so no time is gained while away.
     const onHidden = (): void => this.pauseGame();
@@ -236,46 +242,68 @@ export class GameScene extends Phaser.Scene {
       this.hungerWarned = false;
     }
     this.showFloatingText(item.x, item.y, delta);
-    this.showCatchPopup(def.key, def.label, delta);
+    this.showCatchPopup(def.key, def.label, delta, def.type);
     item.collect();
   }
 
   /**
-   * Footer "what did I just eat/do" feed: newest row on top, the previous one
-   * slides down and dims, older rows leave — so quick catches never overlap.
+   * Footer "what did I just eat/do" feed: a rounded card with a big glowing
+   * icon badge, the item name and type, and the calorie change, all coloured
+   * by item type. The newest row is on top; the previous one slides down,
+   * shrinks and dims; older rows leave — so quick catches never overlap.
    */
-  private showCatchPopup(textureKey: string, label: string, delta: number): void {
-    const ROW1 = gameConfig.footer.top + 72;
-    const ROW_GAP = 92;
+  private showCatchPopup(textureKey: string, label: string, delta: number, type: ItemType): void {
+    const ROW1 = gameConfig.footer.top + 96;
+    const ROW_GAP = 112;
+    const TYPE: Record<ItemType, { tag: string; col: number; css: string }> = {
+      activity: { tag: "AKTIVITAS", col: 0x2bff74, css: "#2bff74" },
+      healthy: { tag: "MAKANAN SEHAT", col: 0xffc22e, css: "#ffc22e" },
+      food: { tag: "MAKANAN BERAT", col: 0xff5a3a, css: "#ff5a3a" },
+    };
+    const t = TYPE[type];
+    const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
 
-    let color = "#ff6b6b";
-    let sign = "";
-    if (delta > 0) {
-      color = "#7CFC8A";
-      sign = "+";
-    } else if (delta === 0) {
-      color = "#cfd8e6";
-    }
-
-    const icon = this.add.image(0, 0, textureKey).setDisplaySize(80, 80);
+    const ICON_R = 60;
+    const CARD_H = 96;
     const name = this.add
-      .text(56, -20, label, {
-        fontFamily: FONT_UI,
-        fontSize: "34px",
-        color: "#ffffff",
-        fontStyle: "bold",
+      .text(0, -14, label, { fontFamily: FONT_UI, fontSize: "32px", color: "#ffffff", fontStyle: "bold" })
+      .setOrigin(0, 0.5);
+    const tag = this.add
+      .text(0, 22, t.tag, { fontFamily: FONT_UI, fontSize: "18px", color: t.css, fontStyle: "bold" })
+      .setOrigin(0, 0.5);
+    tag.setLetterSpacing?.(1);
+    const kcal = this.add
+      .text(0, 0, `${sign}${Math.abs(Math.round(delta))}`, {
+        fontFamily: FONT_DISPLAY,
+        fontSize: "50px",
+        color: t.css,
+        stroke: "#0b1020",
+        strokeThickness: 6,
       })
       .setOrigin(0, 0.5);
-    const eff = this.add
-      .text(56, 22, delta === 0 ? "netral" : `${sign}${Math.round(delta)} kkal`, {
-        fontFamily: FONT_UI,
-        fontSize: "30px",
-        color,
-        fontStyle: "bold",
-      })
-      .setOrigin(0, 0.5);
-    const width = 56 + Math.max(name.width, eff.width);
-    const row = this.add.container(GAME_WIDTH / 2 - width / 2 + 40, ROW1, [icon, name, eff]).setDepth(120);
+    const textW = Math.max(name.width, tag.width);
+    const cardX = ICON_R - 4; // card starts under the badge
+    const cardW = ICON_R + 18 + textW + 24 + kcal.width + 34;
+    const total = cardX + cardW;
+    const left = -total / 2;
+    name.x = left + cardX + ICON_R + 18;
+    tag.x = name.x;
+    kcal.x = name.x + textW + 24;
+
+    const card = this.add.graphics();
+    card.fillStyle(0x000000, 0.35).fillRoundedRect(left + cardX, -CARD_H / 2 + 8, cardW, CARD_H, CARD_H / 2);
+    card.lineStyle(12, t.col, 0.16).strokeRoundedRect(left + cardX, -CARD_H / 2, cardW, CARD_H, CARD_H / 2);
+    card.fillStyle(0x0e1630, 0.9).fillRoundedRect(left + cardX, -CARD_H / 2, cardW, CARD_H, CARD_H / 2);
+    card.lineStyle(3, t.col, 1).strokeRoundedRect(left + cardX, -CARD_H / 2, cardW, CARD_H, CARD_H / 2);
+    // icon badge
+    const bx = left + ICON_R;
+    card.lineStyle(12, t.col, 0.22).strokeCircle(bx, 0, ICON_R);
+    card.fillStyle(0x16223f, 1).fillCircle(bx, 0, ICON_R);
+    card.fillStyle(0xffffff, 0.06).fillCircle(bx, -12, ICON_R * 0.7);
+    card.lineStyle(4, t.col, 1).strokeCircle(bx, 0, ICON_R);
+    const icon = this.add.image(bx, 0, textureKey).setDisplaySize(92, 92);
+
+    const row = this.add.container(GAME_WIDTH / 2, ROW1, [card, icon, name, tag, kcal]).setDepth(120);
 
     // push older rows down
     this.feed = this.feed.filter((r) => r.active);
@@ -284,14 +312,16 @@ export class GameScene extends Phaser.Scene {
       if (k >= 1) {
         this.tweens.add({ targets: r, alpha: 0, duration: 120, onComplete: () => r.destroy() });
       } else {
-        this.tweens.add({ targets: r, y: ROW1 + ROW_GAP, alpha: 0.5, scale: 0.86, duration: 160, ease: "Quad.easeOut" });
+        this.tweens.add({ targets: r, y: ROW1 + ROW_GAP - 6, alpha: 0.5, scale: 0.7, duration: 170, ease: "Quad.easeOut" });
         this.tweens.add({ targets: r, alpha: 0, delay: 900, duration: 250, onComplete: () => r.destroy() });
       }
     });
     this.feed = [row, ...this.feed.slice(0, 1)];
 
-    row.setAlpha(0).setScale(1.12);
-    this.tweens.add({ targets: row, alpha: 1, scale: 1, duration: 150, ease: "Quad.easeOut" });
+    row.setAlpha(0).setScale(0.8);
+    icon.setScale(icon.scaleX * 1.4);
+    this.tweens.add({ targets: row, alpha: 1, scale: 1, duration: 200, ease: "Back.easeOut" });
+    this.tweens.add({ targets: icon, scale: icon.scaleX / 1.4, duration: 260, ease: "Back.easeOut" });
     this.tweens.add({ targets: row, alpha: 0, delay: 1500, duration: 300, onComplete: () => row.destroy() });
   }
 
@@ -483,11 +513,11 @@ export class GameScene extends Phaser.Scene {
     const cfg = gameConfig.intro;
 
     if (this.showBriefing) {
-      this.hud.update(gameConfig.maxHp, 0); // already filled in the briefing
+      this.hud.update(gameConfig.maxHp, 0, false); // already filled in the briefing
     } else {
       const fillT = Phaser.Math.Clamp(this.introElapsed / cfg.countMs, 0, 1);
       const eased = Phaser.Math.Easing.Cubic.Out(fillT);
-      this.hud.update(eased * gameConfig.maxHp, 0);
+      this.hud.update(eased * gameConfig.maxHp, 0, false);
     }
 
     const countdown = Math.max(1, Math.ceil((cfg.countMs - this.introElapsed) / 1000));
@@ -518,19 +548,21 @@ export class GameScene extends Phaser.Scene {
     this.hp = gameConfig.startHp;
     this.starveTotal = starveWindow(0);
     this.starveTimer = this.starveTotal;
-    this.hud.update(this.hp, 0);
+    this.hud.update(this.hp, 0, false);
     this.warnBorder.setVisible(false);
     this.countdownText.destroy();
     Sfx.playMusic("game");
   }
 
   private addPauseButton(x: number, y: number): void {
-    const S = 72;
+    const S = 50;
     const bg = this.add.graphics();
-    bg.fillStyle(0x000000, 0.4).fillRoundedRect(-S / 2, -S / 2, S, S, 14);
-    bg.fillStyle(0xffffff, 1).fillRect(-14, -18, 9, 36).fillRect(5, -18, 9, 36);
+    roundButtonBg(bg, S);
+    bg.fillStyle(0xffffff, 1).fillRoundedRect(-10, -12, 7, 24, 2).fillRoundedRect(3, -12, 7, 24, 2);
     const btn = this.add.container(x, y, [bg]).setSize(S, S).setDepth(300);
     btn.setInteractive({ useHandCursor: true });
+    btn.on("pointerover", () => btn.setScale(1.08));
+    btn.on("pointerout", () => btn.setScale(1));
     btn.on("pointerup", () => {
       Sfx.click();
       this.pauseGame();

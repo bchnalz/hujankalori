@@ -460,6 +460,21 @@ class SfxEngine {
     this.tone(1200, t + 0.05, 0.06, { type: "triangle", vol: 0.06 });
   }
 
+  /** Calorie gauge chunk melting away (big drops only). */
+  gaugeDown(): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.tone(520, t + 0.05, 0.28, { type: "triangle", vol: 0.07, to: 180 });
+  }
+
+  /** Calorie gauge refilling: quick soft upward sparkle. */
+  gaugeUp(): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.tone(880, t + 0.04, 0.08, { type: "sine", vol: 0.06, to: 1320 });
+    this.tone(1760, t + 0.1, 0.07, { type: "sine", vol: 0.04 });
+  }
+
   /** Carousel card sliding by (dir: +1 next, -1 previous). */
   slide(dir = 1): void {
     if (!this.ready()) return;
