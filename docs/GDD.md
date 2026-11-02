@@ -21,6 +21,32 @@ play system (later passes).
 | GAME-07/08/09 | Cosmetics, shop, rare drop | ⏳ Next pass |
 | GAME-11 | Separate deployment | ⏳ Next pass (see architecture) |
 
+## 2b. Visual style
+
+- **Theme** (`src/config/theme.ts`): one palette (night blues, green / gold /
+  red accents) and two self-hosted fonts — **Lilita One** for titles, numbers,
+  buttons and callouts (matches the logo and the promo flyer) and **Plus Jakarta
+  Sans** for UI text. Fonts load before the first scene.
+- **Backdrop** (`src/ui/Backdrop.ts`): procedural rainy night city drawn into
+  canvas textures once — sky gradient with city glow and a hazy moon, drifting
+  clouds, far/near skylines with lit windows (a few flicker) and a hospital with
+  a glowing red cross, and a wet street with puddles, reflections and rain
+  ripples. Lightning bolts strike behind the buildings.
+- **Character** (`src/objects/CharacterArt.ts`): larger art (176 px) with a
+  drawn face that follows the idle bob and reacts — happy (activity), chewing
+  (healthy), shocked + red flash (heavy food), panicking with a sweat drop when
+  the hunger timer is low; dizzy or bloated on game over. It leans into movement
+  and squashes on catches. The catch hitbox is unchanged (`Player` is an
+  invisible physics zone carrying the art).
+- **Particles** (`src/ui/Fx.ts`): star bursts for good catches, red bits and
+  crumbs for heavy food, splashes when items hit the street, confetti on a new
+  record; items pop in as they appear.
+- **HUD**: drops leave a light "melting" segment on the calorie bar and the
+  number rolls; gains flash the bar.
+- **Transitions**: scenes fade through night blue; the end of a run flashes and
+  zooms onto the character before Game Over.
+- **Buttons**: raised style with a darker base that the face presses into.
+
 ## 2a. Start flow (onboarding & intro)
 
 - **Start screen** (`StartScene`): one big MULAI button on page load. The tap

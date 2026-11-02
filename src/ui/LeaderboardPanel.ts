@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { FONT_UI } from "../config/theme";
 import type { LeaderboardEntry } from "../data/leaderboard";
 
 const MEDALS = [0xffd54f, 0xcfd8dc, 0xd7a86e];
@@ -43,7 +44,7 @@ export function renderLeaderboard(
     c.add(
       scene.add
         .text(0, 20 + RH / 2, opts.emptyText ?? "Belum ada skor. Jadilah yang pertama!", {
-          fontFamily: "system-ui, sans-serif",
+          fontFamily: FONT_UI,
           fontSize: "26px",
           color: "#9fb0d0",
         })

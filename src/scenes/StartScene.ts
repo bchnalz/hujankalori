@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { FONT_DISPLAY, FONT_UI } from "../config/theme";
 import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
 import { UI } from "../config/assetManifest";
 import { Sfx } from "../audio/Sfx";
@@ -54,7 +55,7 @@ export class StartScene extends Phaser.Scene {
 
     const label = this.add
       .text(GAME_WIDTH / 2, btnY + R + 60, "MULAI", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_DISPLAY,
         fontSize: "58px",
         color: "#ffffff",
         fontStyle: "bold",
@@ -64,7 +65,7 @@ export class StartScene extends Phaser.Scene {
 
     const hint = this.add
       .text(GAME_WIDTH / 2, btnY + R + 130, "Ketuk untuk mulai • nyalakan suara 🔊", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "26px",
         color: "#9fb0d0",
       })
