@@ -1,17 +1,20 @@
 import Phaser from "phaser";
 import { FONT_DISPLAY, FONT_UI } from "../config/theme";
-import { GAME_WIDTH, gameConfig } from "../config/gameConfig";
+import { gameConfig } from "../config/gameConfig";
+import { PANEL_H, PANEL_W, PANEL_X, PANEL_Y } from "./Hud";
 
-export const STARVE_CX = GAME_WIDTH - 96;
-export const STARVE_CY = 180;
-export const STARVE_R = 60;
+export const STARVE_R = 56;
+export const STARVE_CX = PANEL_X + PANEL_W - STARVE_R - 14;
+export const STARVE_CY = PANEL_Y + PANEL_H / 2 - 2;
 const CX = STARVE_CX;
 const CY = STARVE_CY;
 const R = STARVE_R;
+const RING = 13;
 
 /**
- * Pie/radial countdown for the starvation timer (GAME mechanic: eat within N
- * seconds or starve). Depletes clockwise; turns red and pulses when low.
+ * Hunger countdown as a neon ring at the right end of the HUD panel: drains
+ * clockwise, green → amber → red; when it's low it glows and pulses and the
+ * tag switches from LAPAR to MAKAN!.
  */
 export class StarveGauge {
   private readonly scene: Phaser.Scene;
@@ -21,22 +24,25 @@ export class StarveGauge {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
-    this.g = scene.add.graphics().setDepth(100);
+    this.g = scene.add.graphics().setDepth(101);
     this.num = scene.add
       .text(CX, CY, "", {
         fontFamily: FONT_DISPLAY,
-        fontSize: "44px",
+        fontSize: "50px",
         color: "#ffffff",
-        fontStyle: "bold",
+        stroke: "#0b1020",
+        strokeThickness: 4,
       })
       .setOrigin(0.5)
       .setDepth(102);
     this.label = scene.add
-      .text(CX, CY + R + 16, "LAPAR", {
+      .text(CX, CY + R + 4, "LAPAR", {
         fontFamily: FONT_UI,
-        fontSize: "20px",
-        color: "#cfd8e6",
+        fontSize: "15px",
         fontStyle: "bold",
+        color: "#0b1020",
+        backgroundColor: "#7cfc8a",
+        padding: { x: 10, y: 3 },
       })
       .setOrigin(0.5)
       .setDepth(102);
@@ -51,38 +57,37 @@ export class StarveGauge {
   update(remaining: number, total: number): void {
     const ratio = Phaser.Math.Clamp(remaining / total, 0, 1);
     const low = remaining <= gameConfig.starvation.warnSeconds;
+    const now = this.scene.time.now;
 
-    let color = 0x4caf50;
-    if (low) color = 0xe53935;
-    else if (ratio < 0.5) color = 0xffb300;
+    let color = 0x7cfc8a;
+    let css = "#7cfc8a";
+    if (low) {
+      color = 0xff4526;
+      css = "#ff6a45";
+    } else if (ratio < 0.5) {
+      color = 0xffc22e;
+      css = "#ffc22e";
+    }
 
-    this.g.clear();
-    this.g.fillStyle(0x000000, 0.45);
-    this.g.fillCircle(CX, CY, R + 7);
-    this.g.fillStyle(0x10131c, 1);
-    this.g.fillCircle(CX, CY, R);
-
+    const g = this.g;
+    g.clear();
+    g.fillStyle(0x070b16, 0.95).fillCircle(CX, CY, R);
+    // track + progress ring
+    g.lineStyle(RING, 0x1a2340, 1).strokeCircle(CX, CY, R - RING / 2);
     if (ratio > 0) {
       const start = -Math.PI / 2;
-      const end = start + Math.PI * 2 * ratio;
-      this.g.fillStyle(color, 1);
-      this.g.beginPath();
-      this.g.slice(CX, CY, R, start, end, false);
-      this.g.closePath();
-      this.g.fillPath();
+      g.lineStyle(RING, color, 1);
+      g.beginPath();
+      g.arc(CX, CY, R - RING / 2, start, start + Math.PI * 2 * ratio, false);
+      g.strokePath();
     }
+    // outer neon halo (pulses when low)
+    const glow = low ? 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(now / 110)) : 0.35;
+    g.lineStyle(3, color, glow).strokeCircle(CX, CY, R + 5);
+    if (low) g.lineStyle(8, color, glow * 0.3).strokeCircle(CX, CY, R + 8);
 
-    this.g.fillStyle(0x10131c, 1);
-    this.g.fillCircle(CX, CY, R * 0.55);
-
-    this.num.setText(`${Math.ceil(remaining)}`).setColor(low ? "#ff6b6b" : "#ffffff");
-
-    if (low) {
-      this.num.setScale(1 + 0.12 * Math.sin(this.scene.time.now / 90));
-      this.label.setText("MAKAN!").setColor("#ff6b6b");
-    } else {
-      this.num.setScale(1);
-      this.label.setText("LAPAR").setColor("#cfd8e6");
-    }
+    this.num.setText(`${Math.ceil(remaining)}`).setColor(low ? "#ff8a70" : "#ffffff");
+    this.num.setScale(low ? 1 + 0.12 * Math.sin(now / 90) : 1);
+    this.label.setText(low ? "MAKAN!" : "LAPAR").setBackgroundColor(css);
   }
 }
