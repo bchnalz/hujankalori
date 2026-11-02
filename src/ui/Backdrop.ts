@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
-import { BACKDROP, PALETTE, type BackdropVariant } from "../config/theme";
+import { backdropForNow, FONT_MONUMENT, PALETTE, type BackdropVariant } from "../config/theme";
+import { getBackdropChoice } from "../data/prefs";
 
 /**
  * Rainy night city backdrop, drawn procedurally into canvas textures once per
@@ -23,20 +24,37 @@ export interface BackdropOpts {
   ripples?: boolean;
   /** 0..1 darkening over the skyline so foreground UI stands out. */
   dim?: number;
-  /** Override the configured scenery ("city" | "hospital"). */
+  /** Override the scenery for this screen. */
   variant?: BackdropVariant;
 }
 
-/** Which scenery to draw; `?bg=city` or `?bg=hospital` in the URL overrides it. */
-function pickVariant(explicit?: BackdropVariant): BackdropVariant {
-  if (explicit) return explicit;
+const VARIANT_KEY = "__bd_variant";
+
+/**
+ * Work out the scenery once and remember it in the game registry, so every
+ * screen of a session shows the same scene even if the clock crosses a time
+ * slot mid-run. Order: `?bg=` URL override → the player's menu pick →
+ * the current WIB time of day.
+ */
+export function resolveBackdrop(scene: Phaser.Scene): BackdropVariant {
+  let v: BackdropVariant | null = null;
   try {
     const q = new URLSearchParams(window.location.search).get("bg");
-    if (q === "city" || q === "hospital") return q;
+    if (q === "city" || q === "hospital" || q === "morning" || q === "garden") v = q;
   } catch {
     /* ignore */
   }
-  return BACKDROP;
+  if (!v) {
+    const c = getBackdropChoice();
+    v = c === "auto" ? backdropForNow() : c;
+  }
+  scene.registry.set(VARIANT_KEY, v);
+  return v;
+}
+
+function pickVariant(scene: Phaser.Scene, explicit?: BackdropVariant): BackdropVariant {
+  if (explicit) return explicit;
+  return (scene.registry.get(VARIANT_KEY) as BackdropVariant | undefined) ?? resolveBackdrop(scene);
 }
 
 const SKY = "__bd_sky";
@@ -62,8 +80,10 @@ function rng(seed: number): () => number {
 const hex = (c: number, a = 1): string =>
   `rgba(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255},${a})`;
 
-function makeSky(scene: Phaser.Scene): void {
-  if (scene.textures.exists(SKY)) return;
+function makeSky(scene: Phaser.Scene, variant: BackdropVariant): string {
+  if (variant === "morning") return makeMorningSky(scene);
+  if (variant === "garden") return makeGardenSky(scene);
+  if (scene.textures.exists(SKY)) return SKY;
   const tex = scene.textures.createCanvas(SKY, GAME_WIDTH, GAME_HEIGHT)!;
   const ctx = tex.getContext();
   const g = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
@@ -91,13 +111,61 @@ function makeSky(scene: Phaser.Scene): void {
   ctx.arc(150, 230, 34, 0, Math.PI * 2);
   ctx.fill();
   tex.refresh();
+  return SKY;
 }
 
-function makeCloud(scene: Phaser.Scene): void {
-  if (scene.textures.exists(CLOUD)) return;
+/** Rainy late afternoon: heavy grey cover with a faint warm band low down. */
+function makeGardenSky(scene: Phaser.Scene): string {
+  const key = "__bd_sky_garden";
+  if (scene.textures.exists(key)) return key;
+  const tex = scene.textures.createCanvas(key, GAME_WIDTH, GAME_HEIGHT)!;
+  const ctx = tex.getContext();
+  const g = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+  g.addColorStop(0, "#22263a");
+  g.addColorStop(0.45, "#3a3d56");
+  g.addColorStop(0.72, "#5e5a6e");
+  g.addColorStop(1, "#3a3a52");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  const sun = ctx.createRadialGradient(180, 520, 20, 180, 520, 420);
+  sun.addColorStop(0, "rgba(230,190,170,0.16)");
+  sun.addColorStop(1, "rgba(230,190,170,0)");
+  ctx.fillStyle = sun;
+  ctx.fillRect(0, 0, GAME_WIDTH, 1000);
+  tex.refresh();
+  return key;
+}
+
+/** Dark overcast morning: slate cloud cover, a pale band near the horizon, no sun. */
+function makeMorningSky(scene: Phaser.Scene): string {
+  const key = "__bd_sky_morning";
+  if (scene.textures.exists(key)) return key;
+  const tex = scene.textures.createCanvas(key, GAME_WIDTH, GAME_HEIGHT)!;
+  const ctx = tex.getContext();
+  const g = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+  g.addColorStop(0, "#1f2638");
+  g.addColorStop(0.45, "#343e57");
+  g.addColorStop(0.78, "#56627c");
+  g.addColorStop(1, "#3a4560");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  // diffuse light where the hidden sun is
+  const sun = ctx.createRadialGradient(560, 260, 20, 560, 260, 380);
+  sun.addColorStop(0, "rgba(210,218,236,0.18)");
+  sun.addColorStop(1, "rgba(210,218,236,0)");
+  ctx.fillStyle = sun;
+  ctx.fillRect(0, 0, GAME_WIDTH, 700);
+  tex.refresh();
+  return key;
+}
+
+function makeCloud(scene: Phaser.Scene, variant: BackdropVariant): string {
+  const key = variant === "city" || variant === "hospital" ? CLOUD : `${CLOUD}_${variant}`;
+  if (scene.textures.exists(key)) return key;
+  const col = variant === "morning" ? "92,102,128" : variant === "garden" ? "96,94,118" : "70,82,120";
   const W = 420;
   const H = 170;
-  const tex = scene.textures.createCanvas(CLOUD, W, H)!;
+  const tex = scene.textures.createCanvas(key, W, H)!;
   const ctx = tex.getContext();
   const r = rng(11);
   for (let i = 0; i < 14; i++) {
@@ -105,14 +173,15 @@ function makeCloud(scene: Phaser.Scene): void {
     const cy = 60 + r() * (H - 100);
     const rad = 40 + r() * 50;
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
-    grad.addColorStop(0, "rgba(70,82,120,0.55)");
-    grad.addColorStop(1, "rgba(70,82,120,0)");
+    grad.addColorStop(0, `rgba(${col},0.6)`);
+    grad.addColorStop(1, `rgba(${col},0)`);
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(cx, cy, rad, 0, Math.PI * 2);
     ctx.fill();
   }
   tex.refresh();
+  return key;
 }
 
 function makeRipple(scene: Phaser.Scene): void {
@@ -202,14 +271,30 @@ function makeGround(scene: Phaser.Scene, horizon: number, variant: BackdropVaria
   const H = GAME_HEIGHT - horizon;
   const tex = scene.textures.createCanvas(key, GAME_WIDTH, H)!;
   const ctx = tex.getContext();
+  const garden = variant === "garden";
+  const morning = variant === "morning" || garden;
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, hex(PALETTE.ground.top));
-  g.addColorStop(1, hex(PALETTE.ground.bottom));
+  g.addColorStop(0, garden ? "#2c4a36" : morning ? "#3a4460" : hex(PALETTE.ground.top));
+  g.addColorStop(1, garden ? "#142218" : morning ? "#1f2638" : hex(PALETTE.ground.bottom));
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, GAME_WIDTH, H);
   // curb line
-  ctx.fillStyle = hex(0x3a4878);
+  ctx.fillStyle = garden ? "#5a7a4c" : hex(0x3a4878);
   ctx.fillRect(0, 0, GAME_WIDTH, 6);
+  if (garden) {
+    // grass blades
+    const gr = rng(9);
+    ctx.strokeStyle = "rgba(120,170,110,0.25)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 260; i++) {
+      const x = gr() * GAME_WIDTH;
+      const y = 10 + gr() * (H - 10);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (gr() - 0.5) * 6, y - 6 - gr() * 6);
+      ctx.stroke();
+    }
+  }
   ctx.fillStyle = "rgba(255,255,255,0.12)";
   ctx.fillRect(0, 0, GAME_WIDTH, 2);
   // reflections of window light
@@ -218,27 +303,29 @@ function makeGround(scene: Phaser.Scene, horizon: number, variant: BackdropVaria
     const x = r() * GAME_WIDTH;
     const w = 6 + r() * 14;
     const len = 30 + r() * 90;
-    const warm = r() < 0.8;
+    const warm = r() < (morning ? 0.25 : 0.8);
     const grad = ctx.createLinearGradient(0, 8, 0, 8 + len);
     grad.addColorStop(0, hex(warm ? PALETTE.skyline.window : PALETTE.skyline.windowCool, 0.22));
     grad.addColorStop(1, hex(warm ? PALETTE.skyline.window : PALETTE.skyline.windowCool, 0));
     ctx.fillStyle = grad;
     ctx.fillRect(x, 8, w, len);
   }
-  // red cross reflection
+  // red sign reflection (night scenery only)
   const rg = ctx.createLinearGradient(0, 8, 0, 120);
+  if (morning) ctx.globalAlpha = 0;
   rg.addColorStop(0, "rgba(255,80,80,0.25)");
   rg.addColorStop(1, "rgba(255,80,80,0)");
   ctx.fillStyle = rg;
   const hx = (scene.registry.get("__bd_hospital_x") as number | undefined) ?? 540;
   ctx.fillRect(hx - 15, 8, 30, 112);
+  ctx.globalAlpha = 1;
   // puddles
   for (let i = 0; i < 6; i++) {
     const px = 60 + r() * (GAME_WIDTH - 120);
     const py = 40 + r() * (H - 70);
     const pw = 90 + r() * 120;
     const ph = 14 + r() * 12;
-    ctx.fillStyle = hex(PALETTE.ground.puddle, 0.55);
+    ctx.fillStyle = garden ? "rgba(96,112,130,0.5)" : morning ? "rgba(110,124,156,0.5)" : hex(PALETTE.ground.puddle, 0.55);
     ctx.beginPath();
     ctx.ellipse(px, py, pw / 2, ph / 2, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -685,13 +772,642 @@ function makeHospital(scene: Phaser.Scene, horizon: number, darkness = HOSPITAL_
   return meta;
 }
 
+/** 0..1 overcast shade on the main building (URL: ?mdark=0.4). */
+const MAIN_DARKNESS = (() => {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const v = Number(p.get("mdark"));
+    if (p.has("mdark") && Number.isFinite(v) && v >= 0 && v <= 0.95) return v;
+  } catch {
+    /* ignore */
+  }
+  return 0.4;
+})();
+
+/**
+ * RSUD main building on a dark overcast morning: white classical facade with
+ * a maroon hip roof and five dormers, two corner towers with pyramid roofs and
+ * small domed cupolas, arched top-floor and tower windows, iron balconies, a
+ * central entrance portico with an arched window, the flag, palms, trees and
+ * blue lamp posts. (No name sign, on request.)
+ */
+function makeMainBuilding(scene: Phaser.Scene, horizon: number, darkness = MAIN_DARKNESS): { key: string; windows: Win[] } {
+  const key = `__bd_main_${horizon}_${darkness}`;
+  const winKey = `${key}_wins`;
+  if (scene.textures.exists(key)) return { key, windows: (scene.registry.get(winKey) as Win[]) ?? [] };
+  const tex = scene.textures.createCanvas(key, GAME_WIDTH, horizon)!;
+  const ctx = tex.getContext();
+  const base = horizon;
+  const r = rng(33);
+  const windows: Win[] = [];
+  const lit: Win[] = [];
+
+  const WALL = "#dfe3ea";
+  const WALL_SHADE = "#c3c9d6";
+  const TRIM = "#f3efe4";
+  const ROOF = "#7a2a30";
+  const ROOF_DARK = "#5a1e24";
+  const GLASS = "#5d6984";
+  const FRAME = "#f6f7fa";
+  const WARM = "#ffd9a0";
+
+  const win = (x: number, y: number, w: number, h: number, arched: boolean): void => {
+    const isLit = r() < 0.2;
+    ctx.fillStyle = FRAME;
+    ctx.beginPath();
+    if (arched) {
+      ctx.moveTo(x - 2, y + h + 2);
+      ctx.lineTo(x - 2, y + w / 2);
+      ctx.arc(x + w / 2, y + w / 2, w / 2 + 2, Math.PI, 0);
+      ctx.lineTo(x + w + 2, y + h + 2);
+    } else {
+      ctx.rect(x - 2, y - 2, w + 4, h + 4);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = isLit ? WARM : GLASS;
+    ctx.beginPath();
+    if (arched) {
+      ctx.moveTo(x, y + h);
+      ctx.lineTo(x, y + w / 2);
+      ctx.arc(x + w / 2, y + w / 2, w / 2, Math.PI, 0);
+      ctx.lineTo(x + w, y + h);
+    } else {
+      ctx.rect(x, y, w, h);
+    }
+    ctx.closePath();
+    ctx.fill();
+    // mullions
+    ctx.fillStyle = "rgba(246,247,250,0.9)";
+    ctx.fillRect(x + w / 2 - 1, y + (arched ? w / 3 : 0), 2, h - (arched ? w / 3 : 0));
+    ctx.fillRect(x, y + h * (arched ? 0.62 : 0.5) - 1, w, 2);
+    const cell = { x, y, w, h };
+    windows.push(cell);
+    if (isLit) lit.push(cell);
+  };
+
+  // ---- towers
+  const towers: Array<[number, number]> = [
+    [18, 142],
+    [578, 702],
+  ];
+  const tTop = base - 560;
+  for (const [x0, x1] of towers) {
+    ctx.fillStyle = WALL;
+    ctx.fillRect(x0, tTop, x1 - x0, base - tTop);
+    // edge pilasters + shading
+    ctx.fillStyle = WALL_SHADE;
+    ctx.fillRect(x0, tTop, 8, base - tTop);
+    ctx.fillRect(x1 - 8, tTop, 8, base - tTop);
+    // string courses
+    ctx.fillStyle = TRIM;
+    for (let y = tTop + 22; y < base - 30; y += 66) ctx.fillRect(x0, y, x1 - x0, 4);
+    // stacked arched windows
+    const cx = (x0 + x1) / 2;
+    for (let y = tTop + 34; y < base - 70; y += 66) win(cx - 16, y, 32, 46, true);
+    // cornice
+    ctx.fillStyle = TRIM;
+    ctx.fillRect(x0 - 10, tTop - 12, x1 - x0 + 20, 12);
+    // pyramid roof
+    const rg = ctx.createLinearGradient(0, tTop - 76, 0, tTop - 12);
+    rg.addColorStop(0, ROOF_DARK);
+    rg.addColorStop(1, ROOF);
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.moveTo(x0 - 22, tTop - 12);
+    ctx.lineTo(x1 + 22, tTop - 12);
+    ctx.lineTo(x1 - 26, tTop - 76);
+    ctx.lineTo(x0 + 26, tTop - 76);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = TRIM;
+    ctx.fillRect(x0 - 24, tTop - 14, x1 - x0 + 48, 4);
+    // cupola with dome and spire
+    ctx.fillStyle = WALL;
+    ctx.fillRect(cx - 16, tTop - 112, 32, 36);
+    ctx.fillStyle = GLASS;
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, tTop - 80);
+    ctx.lineTo(cx - 7, tTop - 98);
+    ctx.arc(cx, tTop - 98, 7, Math.PI, 0);
+    ctx.lineTo(cx + 7, tTop - 80);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = TRIM;
+    ctx.fillRect(cx - 20, tTop - 114, 40, 5);
+    ctx.fillStyle = WALL;
+    ctx.beginPath();
+    ctx.arc(cx, tTop - 114, 16, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#8a93a6";
+    ctx.fillRect(cx - 1, tTop - 146, 2, 18);
+  }
+
+  // ---- main block
+  const mx0 = 142;
+  const mx1 = 578;
+  const mTop = base - 470;
+  ctx.fillStyle = WALL;
+  ctx.fillRect(mx0, mTop, mx1 - mx0, base - mTop);
+  // hip roof with five dormers
+  const roofTop = mTop - 118;
+  const rg = ctx.createLinearGradient(0, roofTop, 0, mTop);
+  rg.addColorStop(0, ROOF_DARK);
+  rg.addColorStop(1, ROOF);
+  ctx.fillStyle = rg;
+  ctx.beginPath();
+  ctx.moveTo(mx0 - 4, mTop);
+  ctx.lineTo(mx1 + 4, mTop);
+  ctx.lineTo(mx1 - 104, roofTop);
+  ctx.lineTo(mx0 + 104, roofTop);
+  ctx.closePath();
+  ctx.fill();
+  // roof shingle hint
+  ctx.strokeStyle = "rgba(0,0,0,0.12)";
+  ctx.lineWidth = 1;
+  for (let y = roofTop + 14; y < mTop; y += 14) {
+    const t = (y - roofTop) / (mTop - roofTop);
+    ctx.beginPath();
+    ctx.moveTo(mx0 + 104 - 108 * t, y);
+    ctx.lineTo(mx1 - 104 + 108 * t, y);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 5; i++) {
+    const dx = mx0 + 120 + i * ((mx1 - mx0 - 240) / 4);
+    const dy = mTop - 70;
+    ctx.fillStyle = TRIM;
+    ctx.beginPath();
+    ctx.moveTo(dx - 20, dy + 30);
+    ctx.lineTo(dx, dy);
+    ctx.lineTo(dx + 20, dy + 30);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = WALL;
+    ctx.fillRect(dx - 14, dy + 26, 28, 22);
+    ctx.fillStyle = GLASS;
+    ctx.fillRect(dx - 9, dy + 29, 18, 16);
+    ctx.fillStyle = "rgba(246,247,250,0.9)";
+    ctx.fillRect(dx - 1, dy + 29, 2, 16);
+  }
+  // cream eave + cornice
+  ctx.fillStyle = TRIM;
+  ctx.fillRect(mx0 - 6, mTop - 4, mx1 - mx0 + 12, 10);
+
+  // floors: arched pairs on top, rectangular pairs below, pilasters between bays
+  const bays = 8;
+  const bayW = (mx1 - mx0) / bays;
+  const floorH = 58;
+  for (let b = 1; b < bays; b++) {
+    ctx.fillStyle = WALL_SHADE;
+    ctx.fillRect(mx0 + b * bayW - 2, mTop + 8, 4, base - mTop - 8);
+  }
+  for (let f = 0; f < 7; f++) {
+    const y = mTop + 18 + f * floorH;
+    ctx.fillStyle = TRIM;
+    ctx.fillRect(mx0, y - 8, mx1 - mx0, 3);
+    for (let b = 0; b < bays; b++) {
+      const bx = mx0 + b * bayW;
+      const inPortico = f >= 4 && b >= 3 && b <= 4;
+      if (inPortico) continue;
+      win(bx + bayW / 2 - 19, y, 15, f === 0 ? 34 : 28, f === 0);
+      win(bx + bayW / 2 + 4, y, 15, f === 0 ? 34 : 28, f === 0);
+      // iron balconies on a few bays
+      if ((f === 1 || f === 2) && (b === 0 || b === 2 || b === 5 || b === 7)) {
+        ctx.strokeStyle = "#39404f";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx + 6, y + 22, bayW - 12, 10);
+        for (let k = bx + 10; k < bx + bayW - 8; k += 5) {
+          ctx.beginPath();
+          ctx.moveTo(k, y + 22);
+          ctx.lineTo(k, y + 32);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+  // central entrance portico (no name sign)
+  const px0 = mx0 + 3 * bayW - 10;
+  const px1 = mx0 + 5 * bayW + 10;
+  const pTop = base - 236;
+  ctx.fillStyle = "#e8ebf1";
+  ctx.fillRect(px0, pTop, px1 - px0, base - pTop);
+  ctx.fillStyle = TRIM;
+  ctx.fillRect(px0 - 6, pTop - 6, px1 - px0 + 12, 12);
+  ctx.fillRect(px0 - 6, pTop + 22, px1 - px0 + 12, 4);
+  ctx.fillStyle = WALL_SHADE;
+  ctx.fillRect(px0, pTop, 5, base - pTop);
+  ctx.fillRect(px1 - 5, pTop, 5, base - pTop);
+  const pcx = (px0 + px1) / 2;
+  win(pcx - 34, pTop + 50, 68, 70, true);
+  // doors
+  ctx.fillStyle = "#2c3346";
+  ctx.fillRect(pcx - 30, base - 78, 60, 78);
+  ctx.fillStyle = "rgba(255,217,160,0.65)";
+  ctx.fillRect(pcx - 26, base - 72, 24, 72);
+  ctx.fillRect(pcx + 2, base - 72, 24, 72);
+  // small side windows in the portico
+  win(px0 + 16, pTop + 150, 15, 28, false);
+  win(px1 - 31, pTop + 150, 15, 28, false);
+
+  // flag
+  ctx.strokeStyle = "#cfd5df";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(pcx - 56, base);
+  ctx.lineTo(pcx - 56, base - 170);
+  ctx.stroke();
+  ctx.fillStyle = "#e53935";
+  ctx.fillRect(pcx - 54, base - 168, 34, 11);
+  ctx.fillStyle = "#f5f5f5";
+  ctx.fillRect(pcx - 54, base - 157, 34, 11);
+
+  // ---- greenery and lamp posts in front
+  const tree = (x: number, s: number): void => {
+    ctx.fillStyle = "#2c4f3c";
+    ctx.beginPath();
+    ctx.arc(x, base - 70 * s, 46 * s, 0, Math.PI * 2);
+    ctx.arc(x - 30 * s, base - 46 * s, 34 * s, 0, Math.PI * 2);
+    ctx.arc(x + 30 * s, base - 46 * s, 34 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(120,170,130,0.25)";
+    ctx.beginPath();
+    ctx.arc(x - 12 * s, base - 88 * s, 18 * s, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  const palm = (x: number, h: number, lean: number): void => {
+    ctx.strokeStyle = "#5a4a3a";
+    ctx.lineWidth = 7;
+    ctx.lineCap = "round";
+    const tx = x + lean;
+    const ty = base - h;
+    ctx.beginPath();
+    ctx.moveTo(x, base);
+    ctx.quadraticCurveTo(x + lean * 0.2, base - h * 0.5, tx, ty);
+    ctx.stroke();
+    ctx.strokeStyle = "#2f5c46";
+    ctx.lineWidth = 8;
+    for (const [dx, dy] of [[-74, 22], [-60, -14], [-24, -40], [24, -40], [60, -14], [74, 22], [-40, 40], [40, 40]]) {
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.quadraticCurveTo(tx + dx * 0.55, ty + dy - 24, tx + dx, ty + dy);
+      ctx.stroke();
+    }
+  };
+  const lampPost = (x: number): void => {
+    ctx.strokeStyle = "#3f78c4";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x, base);
+    ctx.lineTo(x, base - 160);
+    ctx.lineTo(x + 16, base - 166);
+    ctx.stroke();
+  };
+  tree(100, 1.0);
+  tree(250, 0.9);
+  tree(470, 0.95);
+  tree(630, 1.0);
+  lampPost(196);
+  lampPost(522);
+  palm(40, 150, 10);
+  palm(178, 128, -8);
+  palm(560, 136, 8);
+  palm(690, 156, -12);
+  // low hedge
+  ctx.fillStyle = "#24443a";
+  for (let x = 0; x < GAME_WIDTH; x += 24) {
+    ctx.beginPath();
+    ctx.ellipse(x, base - 8, 20, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- overcast shade, then put back the warm room lights and lamp heads
+  if (darkness > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = `rgba(22,28,48,${darkness})`;
+    ctx.fillRect(0, 0, GAME_WIDTH, horizon);
+    ctx.restore();
+  }
+  ctx.fillStyle = "rgba(255,214,150,0.75)";
+  for (const w of lit) ctx.fillRect(w.x + 1, w.y + 1, w.w - 2, w.h - 2);
+  for (const x of [196, 522]) {
+    const g = ctx.createRadialGradient(x + 16, base - 162, 2, x + 16, base - 162, 38);
+    g.addColorStop(0, "rgba(255,230,180,0.85)");
+    g.addColorStop(1, "rgba(255,230,180,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 30, base - 210, 100, 90);
+  }
+  // morning mist at the foot of the building
+  const mist = ctx.createLinearGradient(0, base - 160, 0, base);
+  mist.addColorStop(0, "rgba(190,200,222,0)");
+  mist.addColorStop(1, "rgba(190,200,222,0.28)");
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, base - 160, GAME_WIDTH, 160);
+
+  tex.refresh();
+  scene.registry.set(winKey, lit);
+  return { key, windows: lit };
+}
+
+/** 0..1 shade on the garden scene (URL: ?gdark=0.4). */
+const GARDEN_DARKNESS = (() => {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const v = Number(p.get("gdark"));
+    if (p.has("gdark") && Number.isFinite(v) && v >= 0 && v <= 0.95) return v;
+  } catch {
+    /* ignore */
+  }
+  return 0.4;
+})();
+
+/**
+ * RSUD front garden on a rainy late afternoon: tall cypress trees, a dense
+ * tree line, a white ward building with a red cross on the left, a pendopo
+ * (red tiled hip roof, white pillars, hanging red lanterns) on the right,
+ * slender shade trees, a log planter, river stones, the lawn and the
+ * "RSUD SIDOARJO" letter sign.
+ */
+function makeGarden(scene: Phaser.Scene, horizon: number, darkness = GARDEN_DARKNESS): { key: string; windows: Win[] } {
+  const key = `__bd_garden_${horizon}_${darkness}`;
+  const winKey = `${key}_wins`;
+  if (scene.textures.exists(key)) return { key, windows: (scene.registry.get(winKey) as Win[]) ?? [] };
+  const tex = scene.textures.createCanvas(key, GAME_WIDTH, horizon)!;
+  const ctx = tex.getContext();
+  const base = horizon;
+  const r = rng(51);
+  const lit: Win[] = [];
+  const lanterns: Array<[number, number]> = [];
+
+  const blob = (x: number, y: number, rad: number, col: string): void => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, rad, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  // ---- far tree line (mid green, hazy)
+  for (let x = -20; x < GAME_WIDTH + 40; x += 34) {
+    blob(x, base - 300 - r() * 70, 50 + r() * 26, "#3f6650");
+  }
+  ctx.fillStyle = "#3f6650";
+  ctx.fillRect(0, base - 300, GAME_WIDTH, 300);
+
+  // ---- white ward building on the left with a red cross
+  const bx1 = 210;
+  const bTop = base - 470;
+  ctx.fillStyle = "#e4e8ef";
+  ctx.fillRect(0, bTop, bx1, base - bTop);
+  ctx.fillStyle = "#c6ccd8";
+  ctx.fillRect(bx1 - 14, bTop, 14, base - bTop);
+  ctx.fillStyle = "#f4f6f9";
+  ctx.fillRect(0, bTop - 10, bx1 + 6, 12);
+  for (let f = 0; f < 6; f++) {
+    for (let c = 0; c < 3; c++) {
+      const x = 14 + c * 62;
+      const y = bTop + 30 + f * 70;
+      const isLit = r() < 0.3;
+      ctx.fillStyle = isLit ? "#ffd9a0" : "#5d6984";
+      ctx.fillRect(x, y, 40, 34);
+      ctx.fillStyle = "rgba(246,247,250,0.9)";
+      ctx.fillRect(x + 19, y, 2, 34);
+      if (isLit) lit.push({ x, y, w: 40, h: 34 });
+    }
+  }
+  // red cross sign
+  ctx.fillStyle = "#f4f6f9";
+  ctx.fillRect(bx1 - 60, bTop + 40, 46, 46);
+  ctx.fillStyle = "#e53935";
+  ctx.fillRect(bx1 - 46, bTop + 46, 18, 34);
+  ctx.fillRect(bx1 - 54, bTop + 54, 34, 18);
+
+  // ---- tall cypress / cemara trees
+  const cypress = (x: number, h: number, w: number, col: string): void => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x, base - h);
+    ctx.quadraticCurveTo(x + w, base - h * 0.55, x + w * 0.55, base - 40);
+    ctx.lineTo(x - w * 0.55, base - 40);
+    ctx.quadraticCurveTo(x - w, base - h * 0.55, x, base - h);
+    ctx.fill();
+    // foliage texture
+    ctx.fillStyle = "rgba(0,0,0,0.14)";
+    for (let y = base - h + 40; y < base - 60; y += 34) {
+      ctx.beginPath();
+      ctx.ellipse(x + (r() - 0.5) * w * 0.6, y, w * 0.35, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#4a3a2e";
+    ctx.fillRect(x - 4, base - 44, 8, 44);
+  };
+  cypress(150, 640, 44, "#24503a");
+  cypress(250, 560, 38, "#2a5a40");
+  cypress(520, 600, 40, "#24503a");
+  cypress(600, 660, 46, "#1f4733");
+
+  // ---- slender shade tree in the middle (umbrella crown)
+  const shade = (x: number, h: number, s: number): void => {
+    ctx.strokeStyle = "#5b4a3a";
+    ctx.lineWidth = 7 * s;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x, base);
+    ctx.quadraticCurveTo(x - 10 * s, base - h * 0.5, x + 6 * s, base - h);
+    ctx.stroke();
+    ctx.lineWidth = 3 * s;
+    for (const [dx, dy] of [[-60, -30], [55, -40], [-30, -70], [35, -80]]) {
+      ctx.beginPath();
+      ctx.moveTo(x + 6 * s, base - h + 20);
+      ctx.lineTo(x + dx * s, base - h + dy * s);
+      ctx.stroke();
+    }
+    for (const [dx, dy, rr] of [[-60, -40, 40], [55, -50, 44], [0, -90, 50], [-30, -80, 36], [40, -96, 34]]) {
+      blob(x + dx * s, base - h + dy * s, rr * s, "#3c7a4c");
+    }
+    ctx.fillStyle = "rgba(170,220,150,0.22)";
+    blob(x - 20 * s, base - h - 100 * s, 22 * s, "rgba(170,220,150,0.22)");
+  };
+  shade(360, 340, 1.0);
+  shade(80, 280, 0.8);
+
+  // ---- pendopo on the right
+  const px0 = 430;
+  const px1 = 720;
+  const roofBase = base - 210;
+  // platform + shadowed interior
+  ctx.fillStyle = "#3a4048";
+  ctx.fillRect(px0 + 20, roofBase, px1 - px0 - 40, 150);
+  ctx.fillStyle = "#d9d4c8";
+  ctx.fillRect(px0 + 6, base - 64, px1 - px0 - 12, 18);
+  // white pillars
+  ctx.fillStyle = "#f2f0ea";
+  for (let x = px0 + 26; x < px1 - 10; x += 64) ctx.fillRect(x, roofBase, 14, 150);
+  // tiered red roof (joglo-ish hip)
+  const roof = (y0: number, y1: number, inset: number, top: number): void => {
+    const g = ctx.createLinearGradient(0, y1, 0, y0);
+    g.addColorStop(0, "#8a2f2a");
+    g.addColorStop(1, "#b5473a");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(px0 - 14 + inset, y0);
+    ctx.lineTo(px1 + 14 - inset, y0);
+    ctx.lineTo(px1 - top, y1);
+    ctx.lineTo(px0 + top, y1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    ctx.lineWidth = 1;
+    for (let y = y1 + 8; y < y0; y += 8) {
+      ctx.beginPath();
+      ctx.moveTo(px0, y);
+      ctx.lineTo(px1, y);
+      ctx.stroke();
+    }
+  };
+  roof(roofBase, roofBase - 46, 0, 50);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, GAME_WIDTH, roofBase - 46);
+  ctx.clip();
+  roof(roofBase - 40, roofBase - 100, 60, 110);
+  ctx.restore();
+  ctx.fillStyle = "#5e1f1c";
+  ctx.fillRect(px0 + 46, roofBase - 47, px1 - px0 - 92, 5);
+  ctx.fillStyle = "#f2f0ea";
+  ctx.fillRect(px0 - 16, roofBase - 2, px1 - px0 + 32, 6);
+  // hanging red lanterns
+  for (const x of [px0 + 60, px0 + 150, px0 + 240]) {
+    ctx.strokeStyle = "#2a2a2a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, roofBase + 4);
+    ctx.lineTo(x, roofBase + 22);
+    ctx.stroke();
+    ctx.fillStyle = "#d8322c";
+    ctx.beginPath();
+    ctx.ellipse(x, roofBase + 34, 10, 13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    lanterns.push([x, roofBase + 34]);
+  }
+  // hedges & flowering shrubs in front of the pendopo
+  for (let x = px0; x < px1 + 20; x += 30) blob(x, base - 50, 24, "#2d5a3a");
+  for (const x of [px0 + 40, px0 + 200]) blob(x, base - 58, 14, "#9a3f6a");
+  // blue / red bins
+  ctx.fillStyle = "#3d8fd6";
+  ctx.fillRect(670, base - 104, 22, 40);
+  ctx.fillStyle = "#d84a3a";
+  ctx.fillRect(694, base - 104, 22, 40);
+
+  // ---- lawn strip
+  const lawn = ctx.createLinearGradient(0, base - 70, 0, base);
+  lawn.addColorStop(0, "#4f8a4a");
+  lawn.addColorStop(1, "#3c7240");
+  ctx.fillStyle = lawn;
+  ctx.fillRect(0, base - 46, GAME_WIDTH, 46);
+  // log planter with greens (front left)
+  ctx.fillStyle = "#4a3426";
+  ctx.beginPath();
+  ctx.roundRect(10, base - 64, 180, 30, 10);
+  ctx.fill();
+  ctx.fillStyle = "#3a281e";
+  ctx.fillRect(36, base - 36, 16, 36);
+  ctx.fillRect(150, base - 36, 16, 36);
+  for (let x = 26; x < 180; x += 22) blob(x, base - 68 - r() * 8, 12 + r() * 6, "#6aa456");
+  // river stones on the right
+  for (let i = 0; i < 12; i++) {
+    const x = 470 + i * 22 + r() * 8;
+    ctx.fillStyle = r() < 0.5 ? "#3a3f46" : "#2c3036";
+    ctx.beginPath();
+    ctx.ellipse(x, base - 14, 14, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- rainy late-afternoon shade, then relight rooms and lanterns
+  if (darkness > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = `rgba(24,26,46,${darkness})`;
+    ctx.fillRect(0, 0, GAME_WIDTH, horizon);
+    ctx.restore();
+  }
+  ctx.fillStyle = "rgba(255,214,150,0.7)";
+  for (const w of lit) ctx.fillRect(w.x + 1, w.y + 1, w.w - 2, w.h - 2);
+  for (const [x, y] of lanterns) {
+    const g = ctx.createRadialGradient(x, y, 2, x, y, 30);
+    g.addColorStop(0, "rgba(255,140,110,0.9)");
+    g.addColorStop(0.35, "rgba(255,80,60,0.35)");
+    g.addColorStop(1, "rgba(255,80,60,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 30, y - 30, 60, 60);
+  }
+  // ---- "RSUD SIDOARJO" letter monument (Bebas Neue, like the real one):
+  // four tall, separate charcoal-concrete RSUD letters, with cream SIDOARJO
+  // letters standing in front in pairs (SI·DO·AR·JO), one pair per RSUD
+  // letter, across their lower middle. A low shrub row hides only the feet.
+  // Drawn after the shade pass so it stays legible.
+  {
+    const cx = GAME_WIDTH / 2;
+    const foot = base - 22;
+    const H = 134; // RSUD cap height
+    const step = 90; // centre distance between RSUD letters
+    const depth = 5;
+    const letter = (ch: string, x: number, y: number, size: number, sx: number, face: string, side: string): void => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(sx, 1);
+      ctx.font = `400 ${size}px ${FONT_MONUMENT}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = side;
+      for (let d = depth; d > 0; d--) ctx.fillText(ch, d / sx, -d * 0.35);
+      ctx.fillStyle = face;
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+    };
+    const big = Math.round(H / 0.7);
+    const rsud = ["R", "S", "U", "D"];
+    const centers = rsud.map((_, i) => cx + (i - 1.5) * step);
+    rsud.forEach((ch, i) => letter(ch, centers[i], foot, big, 1.12, "#596069", "#2b2f34"));
+
+    const sH = H * 0.43;
+    const small = Math.round(sH / 0.7);
+    const sy = foot - H * 0.18;
+    const pairs = [["S", "I"], ["D", "O"], ["A", "R"], ["J", "O"]];
+    pairs.forEach(([a, b], i) => {
+      const c = centers[i];
+      letter(a, c - 19, sy, small, 1.08, "#f3eee1", "#9a9588");
+      letter(b, c + 21, sy, small, 1.08, "#f3eee1", "#9a9588");
+    });
+
+    // shrubs in front, covering only the base of the letters
+    const sr = rng(77);
+    for (let x = cx - 2 * step - 20; x < cx + 2 * step + 30; x += 22) {
+      const rr = 12 + sr() * 8;
+      blob(x, base - 8 - sr() * 5, rr, "#203a2a");
+      blob(x - 4, base - 12 - sr() * 5, rr * 0.55, "#2a4a34");
+    }
+    for (const x of [cx - 120, cx + 30, cx + 150]) blob(x, base - 18, 8, "#6a2f4c");
+  }
+
+  const mist = ctx.createLinearGradient(0, base - 200, 0, base);
+  mist.addColorStop(0, "rgba(190,196,214,0)");
+  mist.addColorStop(1, "rgba(190,196,214,0.2)");
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, base - 200, GAME_WIDTH, 200);
+
+  tex.refresh();
+  scene.registry.set(winKey, lit);
+  return { key, windows: lit };
+}
+
 export function addBackdrop(scene: Phaser.Scene, opts: BackdropOpts = {}): void {
   const horizon = opts.horizon ?? 1020;
-  makeSky(scene);
-  makeCloud(scene);
+  const variant = pickVariant(scene, opts.variant);
+  const skyKey = makeSky(scene, variant);
+  const cloudKey = makeCloud(scene, variant);
   makeRipple(scene);
 
-  scene.add.image(0, 0, SKY).setOrigin(0).setDepth(-10);
+  scene.add.image(0, 0, skyKey).setOrigin(0).setDepth(-10);
 
   // drifting clouds
   const r = rng(Math.floor(Math.random() * 1000) + 1);
@@ -699,7 +1415,7 @@ export function addBackdrop(scene: Phaser.Scene, opts: BackdropOpts = {}): void 
     const y = 90 + i * 70 + r() * 40;
     const scale = 0.8 + r() * 0.9;
     const c = scene.add
-      .image(r() * GAME_WIDTH, y, CLOUD)
+      .image(r() * GAME_WIDTH, y, cloudKey)
       .setScale(scale, scale * 0.8)
       .setAlpha(0.55 + r() * 0.35)
       .setDepth(-9);
@@ -721,10 +1437,23 @@ export function addBackdrop(scene: Phaser.Scene, opts: BackdropOpts = {}): void 
 
   const far = makeSkyline(scene, horizon, "far");
   scene.add.image(0, 0, far.key).setOrigin(0).setDepth(-8);
-  const variant = pickVariant(opts.variant);
+  if (variant === "morning" || variant === "garden") {
+    // daylight haze washes out the distant city
+    scene.add.rectangle(GAME_WIDTH / 2, horizon / 2, GAME_WIDTH, horizon, 0x5a6682, 0.55).setDepth(-7.9);
+  }
   let near: { key: string; windows: Win[] };
   let offColor: number = PALETTE.skyline.near;
-  if (variant === "hospital") {
+  if (variant === "garden") {
+    const m = makeGarden(scene, horizon);
+    near = m;
+    offColor = 0x3a4560;
+    scene.add.image(0, 0, m.key).setOrigin(0).setDepth(-7);
+  } else if (variant === "morning") {
+    const m = makeMainBuilding(scene, horizon);
+    near = m;
+    offColor = 0x3a4560;
+    scene.add.image(0, 0, m.key).setOrigin(0).setDepth(-7);
+  } else if (variant === "hospital") {
     const h = makeHospital(scene, horizon);
     near = h;
     offColor = 0x24407a;
@@ -802,4 +1531,50 @@ export function addBackdrop(scene: Phaser.Scene, opts: BackdropOpts = {}): void 
       });
     }
   }
+}
+
+/**
+ * Static preview of a scenery for the location picker: sky, clouds, distant
+ * city, the building layer and the wet ground composited onto one canvas,
+ * cropped to the lower part where the building is. Cached per variant/size.
+ */
+export function makeBackdropThumb(scene: Phaser.Scene, variant: BackdropVariant, w: number, h: number): string {
+  const key = `__bd_thumb_${variant}_${w}x${h}`;
+  if (scene.textures.exists(key)) return key;
+  const horizon = 1020;
+  const src = (k: string): CanvasImageSource => scene.textures.get(k).getSourceImage() as CanvasImageSource;
+  const full = document.createElement("canvas");
+  full.width = GAME_WIDTH;
+  full.height = GAME_HEIGHT;
+  const c = full.getContext("2d")!;
+  c.drawImage(src(makeSky(scene, variant)), 0, 0);
+  const cloud = src(makeCloud(scene, variant));
+  for (const [x, y, s] of [[-80, 120, 1.3], [300, 220, 1.1], [420, 70, 1.4]] as const) {
+    c.globalAlpha = 0.75;
+    c.drawImage(cloud, x, y, 420 * s, 170 * s * 0.8);
+  }
+  c.globalAlpha = 1;
+  c.drawImage(src(makeSkyline(scene, horizon, "far").key), 0, 0);
+  if (variant === "morning" || variant === "garden") {
+    c.fillStyle = "rgba(90,102,130,0.55)";
+    c.fillRect(0, 0, GAME_WIDTH, horizon);
+  }
+  const building =
+    variant === "garden"
+      ? makeGarden(scene, horizon).key
+      : variant === "morning"
+        ? makeMainBuilding(scene, horizon).key
+        : variant === "hospital"
+          ? makeHospital(scene, horizon).key
+          : makeSkyline(scene, horizon, "near").key;
+  c.drawImage(src(building), 0, 0);
+  c.drawImage(src(makeGround(scene, horizon, variant)), 0, horizon);
+
+  // crop: keep the full width, take the lower part with the matching aspect
+  const sh = Math.min(GAME_HEIGHT, Math.round((GAME_WIDTH * h) / w));
+  const sy = Math.max(0, horizon + 90 - sh);
+  const tex = scene.textures.createCanvas(key, w, h)!;
+  tex.getContext().drawImage(full, 0, sy, GAME_WIDTH, sh, 0, 0, w, h);
+  tex.refresh();
+  return key;
 }

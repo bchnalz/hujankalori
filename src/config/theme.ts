@@ -4,18 +4,43 @@
  * same on every phone instead of falling back to each OS's system font.
  */
 import "@fontsource/lilita-one/latin-400.css";
+import "@fontsource/bebas-neue/latin-400.css";
 import "@fontsource/plus-jakarta-sans/latin-500.css";
 import "@fontsource/plus-jakarta-sans/latin-700.css";
 import "@fontsource/plus-jakarta-sans/latin-800.css";
 
 /** Chunky display face — matches the logo and the promo flyer. */
 export const FONT_DISPLAY = '"Lilita One", "Plus Jakarta Sans", system-ui, sans-serif';
+/** Condensed caps used by the RSUD letter monument in the garden scene. */
+export const FONT_MONUMENT = '"Bebas Neue", "Lilita One", system-ui, sans-serif';
 /** Everyday UI text. */
 export const FONT_UI = '"Plus Jakarta Sans", system-ui, sans-serif';
 
-export type BackdropVariant = "city" | "hospital";
-/** Scenery behind every screen: a generic rainy city, or the RSUD IGD building. */
+export type BackdropVariant = "city" | "hospital" | "morning" | "garden";
+/** Fallback scenery (the night IGD) if nothing else picks one. */
 export const BACKDROP: BackdropVariant = "hospital";
+
+/** What the player picked on the menu: follow the clock, or a fixed scene. */
+export type BackdropChoice = "auto" | "morning" | "garden" | "hospital";
+export const BACKDROP_CHOICES: BackdropChoice[] = ["auto", "hospital", "morning", "garden"];
+export const BACKDROP_LABEL: Record<BackdropChoice, string> = {
+  auto: "Otomatis",
+  hospital: "IGD",
+  morning: "GPT",
+  garden: "Taman (versi 2015)",
+};
+
+/**
+ * Scenery for the current time in WIB (UTC+7):
+ * 05–11 overcast morning (main building) · 11–18 rainy afternoon (garden) ·
+ * 18–05 night (IGD).
+ */
+export function backdropForNow(now = Date.now()): BackdropVariant {
+  const h = new Date(now + 7 * 3600 * 1000).getUTCHours();
+  if (h >= 5 && h < 11) return "morning";
+  if (h >= 11 && h < 18) return "garden";
+  return "hospital";
+}
 
 export const PALETTE = {
   night: { top: 0x070b18, mid: 0x111a38, bottom: 0x24365f },
@@ -37,6 +62,7 @@ export async function loadFonts(): Promise<void> {
   if (!("fonts" in document)) return;
   const wanted = [
     `400 48px "Lilita One"`,
+    `400 48px "Bebas Neue"`,
     `500 24px "Plus Jakarta Sans"`,
     `700 24px "Plus Jakarta Sans"`,
     `800 24px "Plus Jakarta Sans"`,

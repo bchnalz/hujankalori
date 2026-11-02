@@ -1,12 +1,13 @@
 import Phaser from "phaser";
-import { addBackdrop } from "../ui/Backdrop";
-import { FONT_UI } from "../config/theme";
+import { addBackdrop, resolveBackdrop } from "../ui/Backdrop";
+import { BACKDROP_LABEL, FONT_UI } from "../config/theme";
+import { openLocationPicker } from "../ui/LocationPicker";
 import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_WIDTH } from "../config/gameConfig";
 import { UI } from "../config/assetManifest";
 import { PLAYER_BASES } from "../config/playerConfig";
 import type { GameUser, Gender } from "../data/types";
-import { isTutorialDone, saveGender } from "../data/prefs";
+import { getBackdropChoice, isTutorialDone, saveBackdropChoice, saveGender } from "../data/prefs";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { addFullscreenToggle } from "../ui/FullscreenToggle";
@@ -32,6 +33,7 @@ export class MenuScene extends Phaser.Scene {
 
     const user = this.registry.get("user") as GameUser;
 
+    resolveBackdrop(this);
     addBackdrop(this, { horizon: 1160, dim: 0.5 });
 
     new WeatherFx(this, {
@@ -91,8 +93,38 @@ export class MenuScene extends Phaser.Scene {
       color: 0x37406b,
     });
 
+    this.makeLocationButton(1206);
+
     addFullscreenToggle(this, GAME_WIDTH - 56, 56);
     addMuteToggle(this, 56, 56);
+  }
+
+  /** "Pilih lokasi bermain" button opening the scenery carousel popup. */
+  private makeLocationButton(y: number): void {
+    makeButton(
+      this,
+      GAME_WIDTH / 2,
+      y,
+      "PILIH LOKASI BERMAIN",
+      () =>
+        openLocationPicker(this, (c) => {
+          if (c === getBackdropChoice()) return;
+          saveBackdropChoice(c);
+          this.cameras.main.fadeOut(180, 0, 0, 0);
+          this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart());
+        }),
+      { width: 580, height: 70, fontSize: 30, color: 0x2a8f86 },
+    );
+    this.add
+      .text(GAME_WIDTH / 2, y - 58, `Lokasi: ${BACKDROP_LABEL[getBackdropChoice()]}`, {
+        fontFamily: FONT_UI,
+        fontSize: "20px",
+        color: "#c9d4ec",
+        fontStyle: "bold",
+        stroke: "#070b18",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5);
   }
 
   private makeCard(gender: Gender, x: number, label: string): void {
