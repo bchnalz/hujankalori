@@ -32,12 +32,28 @@ play system (later passes).
   clouds, far/near skylines with lit windows (a few flicker) and a hospital with
   a glowing red cross, and a wet street with puddles, reflections and rain
   ripples. Lightning bolts strike behind the buildings.
+- **IGD backdrop** (default, `BACKDROP = "hospital"` in `src/config/theme.ts`):
+  the RSUD emergency building at night in the same style — cream facade with
+  glowing wavy blue window bands, red neon "IGD", blue glass wing with red floor
+  stripes and the "Accident & Emergency Department" sign, orange ground-floor
+  band, the tensile drop-off canopy, a parked ambulance with a flashing red/blue
+  light bar, plants and a street lamp. The building gets a 60% night shade
+  (`?dark=0..0.95` previews other levels) with the neon, lamp and siren kept lit;
+  the ambulance sits deeper in shadow and its siren is small, dim and slow so it
+  never competes with the player or the items. Set `BACKDROP = "city"` for the generic
+  skyline; `?bg=city` / `?bg=hospital` in the URL overrides it for previews.
 - **Character** (`src/objects/CharacterArt.ts`): larger art (176 px) with a
   drawn face that follows the idle bob and reacts — happy (activity), chewing
   (healthy), shocked + red flash (heavy food), panicking with a sweat drop when
   the hunger timer is low; dizzy or bloated on game over. It leans into movement
   and squashes on catches. The catch hitbox is unchanged (`Player` is an
   invisible physics zone carrying the art).
+- **Item glow** (`src/systems/ItemGlow.ts`): every falling item has a
+  neon-emissive outline colour-coded by type — green activity, gold healthy,
+  red-orange heavy food — with a soft halo that pulses slowly, a few light sparks
+  and a faint light trail. Glow textures are baked once per item, so it costs one
+  extra image per item and works without WebGL; it is synced after physics so it
+  never lags behind the item.
 - **Particles** (`src/ui/Fx.ts`): star bursts for good catches, red bits and
   crumbs for heavy food, splashes when items hit the street, confetti on a new
   record; items pop in as they appear.

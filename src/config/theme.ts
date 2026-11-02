@@ -13,6 +13,10 @@ export const FONT_DISPLAY = '"Lilita One", "Plus Jakarta Sans", system-ui, sans-
 /** Everyday UI text. */
 export const FONT_UI = '"Plus Jakarta Sans", system-ui, sans-serif';
 
+export type BackdropVariant = "city" | "hospital";
+/** Scenery behind every screen: a generic rainy city, or the RSUD IGD building. */
+export const BACKDROP: BackdropVariant = "hospital";
+
 export const PALETTE = {
   night: { top: 0x070b18, mid: 0x111a38, bottom: 0x24365f },
   skyline: { far: 0x1a2546, near: 0x10172e, window: 0xffd27a, windowCool: 0x9fd8ff },
