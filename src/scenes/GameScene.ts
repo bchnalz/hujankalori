@@ -1,6 +1,8 @@
 import Phaser from "phaser";
+import { addBackdrop } from "../ui/Backdrop";
+import { FONT_DISPLAY, FONT_UI } from "../config/theme";
+import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_HEIGHT, GAME_WIDTH, gameConfig } from "../config/gameConfig";
-import { BACKGROUND } from "../config/assetManifest";
 import { PLAYER_BASES } from "../config/playerConfig";
 import type { GameUser } from "../data/types";
 import { Player } from "../objects/Player";
@@ -15,6 +17,7 @@ import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { startRun } from "../data/leaderboard";
 import { runBriefing } from "../ui/Briefing";
+import { Fx } from "../ui/Fx";
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -48,6 +51,7 @@ export class GameScene extends Phaser.Scene {
   private nextWarnBeep = 0;
   /** Pre-round popup is open (nothing moves). */
   private briefing = false;
+  private fx!: Fx;
   private showBriefing = true;
   private comboText?: Phaser.GameObjects.Text;
   private comboBadge!: Phaser.GameObjects.Text;
@@ -64,6 +68,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    fadeInScene(this);
+    this.cameras.main.setZoom(1).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
     this.hp = gameConfig.startHp;
     this.starveTotal = starveWindow(0);
     this.starveTimer = this.starveTotal;
@@ -80,12 +86,13 @@ export class GameScene extends Phaser.Scene {
     this.nextWarnBeep = 0;
     this.feed = [];
     this.floats = [];
+    this.briefing = false; // never carry an open popup into a new round
     this.comboText = undefined;
 
     const user = this.registry.get("user") as GameUser;
     const baseKey = PLAYER_BASES[user.gender].key;
 
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setDepth(-2);
+    addBackdrop(this, { horizon: gameConfig.footer.top, groundDepth: 1, dim: 0.25 });
 
     this.weather = new WeatherFx(this, {
       rainDepth: -1,
@@ -98,19 +105,17 @@ export class GameScene extends Phaser.Scene {
       thunderVolume: 0.75,
       rainVolume: 0.02,
       boltChance: 0.8,
-      boltDepth: -0.5,
+      boltDepth: -8.5,
       boltTargetY: [520, 960],
     });
     Sfx.stopMusic(0.5);
 
     const footerTop = gameConfig.footer.top;
-    const footer = this.add.graphics().setDepth(1);
-    footer.fillStyle(0x0b1020, 0.82);
-    footer.fillRect(0, footerTop, GAME_WIDTH, GAME_HEIGHT - footerTop);
-    footer.fillStyle(0x2a3450, 1);
-    footer.fillRect(0, footerTop, GAME_WIDTH, 5);
+    // soft shade on the street so the catch feed stays readable
+    this.add.rectangle(GAME_WIDTH / 2, footerTop + 6 + (GAME_HEIGHT - footerTop) / 2, GAME_WIDTH, GAME_HEIGHT - footerTop - 6, 0x050814, 0.35).setDepth(1.05);
 
     this.player = new Player(this, baseKey);
+    this.fx = new Fx(this);
     this.items = this.physics.add.group();
     this.spawner = new Spawner(this, this.items);
     this.hud = new Hud(this);
@@ -147,7 +152,7 @@ export class GameScene extends Phaser.Scene {
 
     this.countdownText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.42, "", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_DISPLAY,
         fontSize: "180px",
         color: "#ffffff",
         fontStyle: "bold",
@@ -160,7 +165,7 @@ export class GameScene extends Phaser.Scene {
 
     this.comboBadge = this.add
       .text(GAME_WIDTH / 2, 152, "", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "28px",
         color: "#FFD54F",
         fontStyle: "bold",
@@ -207,11 +212,21 @@ export class GameScene extends Phaser.Scene {
     if (def.type === "food") {
       Sfx.catchBad();
       this.cameras.main.shake(140, 0.006);
+      this.player.react("shock", 700, 0.2);
+      this.fx.catchJunk(item.x, item.y);
+      this.player.art.flash(0xff4d4d);
       this.breakCombo();
     } else {
       // Activities and healthy food both build the combo.
-      if (def.type === "activity") Sfx.catchGood(this.combo);
-      else Sfx.catchNeutral();
+      if (def.type === "activity") {
+        Sfx.catchGood(this.combo);
+        this.player.react("happy", 650, 0.12);
+        this.fx.catchActivity(item.x, item.y);
+      } else {
+        Sfx.catchNeutral();
+        this.player.react("chew", 750, 0.1);
+        this.fx.catchHealthy(item.x, item.y);
+      }
       this.combo++;
       if (this.combo >= 2) this.showCombo(this.combo);
     }
@@ -245,7 +260,7 @@ export class GameScene extends Phaser.Scene {
     const icon = this.add.image(0, 0, textureKey).setDisplaySize(80, 80);
     const name = this.add
       .text(56, -20, label, {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "34px",
         color: "#ffffff",
         fontStyle: "bold",
@@ -253,7 +268,7 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0, 0.5);
     const eff = this.add
       .text(56, 22, delta === 0 ? "netral" : `${sign}${Math.round(delta)} kkal`, {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "30px",
         color,
         fontStyle: "bold",
@@ -286,7 +301,7 @@ export class GameScene extends Phaser.Scene {
     this.comboText?.destroy();
     const t = (this.comboText = this.add
       .text(this.player.x, this.player.y - 130, `COMBO x${n}`, {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_DISPLAY,
         fontSize: `${size}px`,
         color: n >= 5 ? "#FFD54F" : "#7CFC8A",
         fontStyle: "bold",
@@ -312,7 +327,7 @@ export class GameScene extends Phaser.Scene {
       const words = ["NTAP!", "AURA FARMING!", "LET HIM COOK!", "KING!", "MASIH LANJUT?!", "G.O.A.T.!"];
       const big = this.add
         .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, words[Math.min(n / 5 - 1, words.length - 1)], {
-          fontFamily: "system-ui, sans-serif",
+          fontFamily: FONT_DISPLAY,
           fontSize: "84px",
           color: "#FFD54F",
           fontStyle: "bold",
@@ -336,8 +351,8 @@ export class GameScene extends Phaser.Scene {
       Sfx.comboBreak();
       const t = this.add
         .text(this.player.x, this.player.y - 130, "Combo putus!", {
-          fontFamily: "system-ui, sans-serif",
-          fontSize: "38px",
+          fontFamily: FONT_DISPLAY,
+          fontSize: "40px",
           color: "#cfd8e6",
           fontStyle: "bold",
           stroke: "#0b1020",
@@ -376,7 +391,7 @@ export class GameScene extends Phaser.Scene {
 
     const txt = this.add
       .text(x, y0, `${sign}${Math.round(delta)} kkal`, {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "40px",
         color,
         fontStyle: "bold",
@@ -423,7 +438,10 @@ export class GameScene extends Phaser.Scene {
     const cullY = gameConfig.footer.top;
     for (const child of [...this.items.getChildren()]) {
       const item = child as FallingItem;
-      if (item.y > cullY) item.destroy();
+      if (item.y > cullY) {
+        if (!item.getData("collected")) this.fx.splash(item.x, cullY + 10);
+        item.destroy();
+      }
     }
 
     if (gameConfig.starvation.enabled) {
@@ -436,6 +454,7 @@ export class GameScene extends Phaser.Scene {
       this.starveTimer > 0 &&
       this.starveTimer <= gameConfig.starvation.warnSeconds;
     this.warnBorder.setVisible(lowHunger);
+    this.player.art.setBaseExpression(lowHunger ? "panic" : "normal");
     if (lowHunger) {
       this.warnBorder.setAlpha(0.3 + 0.4 * Math.abs(Math.sin(time / 110)));
       if (time >= this.nextWarnBeep) {
@@ -531,7 +550,7 @@ export class GameScene extends Phaser.Scene {
     shade.setInteractive(); // swallow taps behind the overlay
     const title = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.36, "JEDA", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_DISPLAY,
         fontSize: "96px",
         color: "#ffffff",
         fontStyle: "bold",
@@ -539,7 +558,7 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     const note = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.36 + 86, "Waktu berhenti saat game dijeda.", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "26px",
         color: "#cfd8e6",
       })
@@ -547,7 +566,7 @@ export class GameScene extends Phaser.Scene {
     const resume = makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, "LANJUT", () => this.resumeGame(), {
       width: 340,
     });
-    const quit = makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55 + 130, "MENU", () => this.scene.start("Menu"), {
+    const quit = makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55 + 130, "MENU", () => goTo(this, "Menu"), {
       width: 340,
       color: 0x37406b,
     });
@@ -569,8 +588,18 @@ export class GameScene extends Phaser.Scene {
     this.ended = true;
     this.physics.pause();
     Sfx.stopMusic(0.3);
-    this.time.delayedCall(350, () => {
-      this.scene.start("GameOver", { survivalSeconds: elapsed, reason, sid: this.runSid });
+    this.warnBorder.setVisible(false);
+    // dramatic beat: flash, punch-in zoom on the player, defeated face
+    this.player.art.setExpression(reason === "starve" ? "dizzy" : "full");
+    this.player.art.squash(0.22);
+    const cam = this.cameras.main;
+    cam.flash(180, 255, 255, 255);
+    cam.shake(260, 0.01);
+    cam.zoomTo(1.12, 500, "Quad.easeOut");
+    cam.pan(this.player.x, this.player.y - 40, 500, "Quad.easeOut");
+    this.time.delayedCall(1200, () => {
+      goTo(this, "GameOver", { survivalSeconds: elapsed, reason, sid: this.runSid });
     });
   }
+
 }

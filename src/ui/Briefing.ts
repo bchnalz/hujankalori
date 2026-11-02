@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { FONT_DISPLAY, FONT_UI } from "../config/theme";
 import { GAME_HEIGHT, GAME_WIDTH, gameConfig } from "../config/gameConfig";
 import { Sfx } from "../audio/Sfx";
 import { BAR_H, BAR_W, BAR_X, BAR_Y, type Hud } from "./Hud";
@@ -56,8 +57,8 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   const heading = (y: number, text: string, color: string): Phaser.GameObjects.Text =>
     scene.add
       .text(GAME_WIDTH / 2, y, text, {
-        fontFamily: "system-ui, sans-serif",
-        fontSize: "36px",
+        fontFamily: FONT_DISPLAY,
+        fontSize: "40px",
         color,
         fontStyle: "bold",
       })
@@ -66,7 +67,7 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   const body = (y: number, text: string): Phaser.GameObjects.Text =>
     scene.add
       .text(GAME_WIDTH / 2, y, text, {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "29px",
         color: "#e8f0ff",
         align: "center",
@@ -86,7 +87,7 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   const miniBar = scene.add.graphics().setAlpha(0);
   const miniBarText = scene.add
     .text(GAME_WIDTH / 2, MINI_BAR_Y + MINI_BAR_H / 2, "", {
-      fontFamily: "system-ui, sans-serif",
+      fontFamily: FONT_UI,
       fontSize: "24px",
       color: "#ffffff",
       fontStyle: "bold",
@@ -112,7 +113,7 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   const miniDonut = scene.add.graphics().setAlpha(0);
   const miniDonutNum = scene.add
     .text(MINI_DONUT_X, MINI_DONUT_Y, "", {
-      fontFamily: "system-ui, sans-serif",
+      fontFamily: FONT_UI,
       fontSize: "34px",
       color: "#ffffff",
       fontStyle: "bold",

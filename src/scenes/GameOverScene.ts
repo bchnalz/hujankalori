@@ -1,6 +1,8 @@
 import Phaser from "phaser";
+import { addBackdrop } from "../ui/Backdrop";
+import { FONT_DISPLAY, FONT_UI } from "../config/theme";
+import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
-import { BACKGROUND } from "../config/assetManifest";
 import type { SessionResult } from "../data/types";
 import {
   fetchBoard,
@@ -18,6 +20,10 @@ import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { addMuteToggle } from "../ui/MuteToggle";
 import { renderLeaderboard } from "../ui/LeaderboardPanel";
+import { CharacterArt } from "../objects/CharacterArt";
+import { PLAYER_BASES } from "../config/playerConfig";
+import type { GameUser } from "../data/types";
+import { Fx, FX_STAR } from "../ui/Fx";
 import { addPeriodTabs } from "../ui/PeriodTabs";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -47,6 +53,7 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create(): void {
+    fadeInScene(this);
     this.busy = false;
     this.phase = "entry";
     this.slotTexts = [];
@@ -54,7 +61,7 @@ export class GameOverScene extends Phaser.Scene {
     this.boardPanel = undefined;
     this.name = getSavedInitials();
 
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+    addBackdrop(this, { horizon: 1120, ripples: false });
     this.add.graphics().fillStyle(0x000000, 0.6).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     addMuteToggle(this, 56, 56);
 
@@ -63,7 +70,7 @@ export class GameOverScene extends Phaser.Scene {
 
     const title = this.add
       .text(GAME_WIDTH / 2, 150, starved ? "KELAPARAN!" : "GAME OVER", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_DISPLAY,
         fontSize: "72px",
         color: starved ? "#ffb300" : "#ffffff",
         fontStyle: "bold",
@@ -72,9 +79,38 @@ export class GameOverScene extends Phaser.Scene {
     title.setScale(1.6).setAlpha(0);
     this.tweens.add({ targets: title, scale: 1, alpha: 1, duration: 380, ease: "Back.easeOut" });
 
+    const fx = new Fx(this); // also creates the particle textures used below
+    // The character shows how the run ended.
+    const user = this.registry.get("user") as GameUser;
+    const hero = new CharacterArt(this, 96, 476, PLAYER_BASES[user.gender].key, 200);
+    hero.setExpression(starved ? "dizzy" : "full");
+    hero.setAlpha(0);
+    this.tweens.add({ targets: hero, alpha: 1, y: { from: 440, to: 476 }, duration: 420, ease: "Bounce.easeOut" });
+    if (starved) {
+      // stars circling the head
+      const stars = [0, 1, 2].map(() => this.add.image(0, 0, FX_STAR).setTint(0xffd54f).setScale(0.9).setDepth(5));
+      const orbit = { a: 0 };
+      this.tweens.add({
+        targets: orbit,
+        a: Math.PI * 2,
+        duration: 1400,
+        repeat: -1,
+        onUpdate: () =>
+          stars.forEach((st, k) => {
+            const ang = orbit.a + (k * Math.PI * 2) / 3;
+            st.setPosition(96 + Math.cos(ang) * 46, 296 + Math.sin(ang) * 12);
+            st.setDepth(Math.sin(ang) > 0 ? 6 : 4);
+          }),
+      });
+    } else {
+      // puffed up and wobbling
+      const bloat = { v: 1 };
+      this.tweens.add({ targets: bloat, v: 1.22, duration: 520, yoyo: true, repeat: -1, ease: "Sine.easeInOut", onUpdate: () => hero.setBloat(bloat.v) });
+    }
+
     this.add
       .text(GAME_WIDTH / 2, 222, starved ? "Kamu lupa makan!" : "Kalori berlebih — batas tercapai!", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "26px",
         color: "#cfd8e6",
       })
@@ -82,7 +118,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.add
       .text(GAME_WIDTH / 2, 290, "Waktu Bertahan", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "28px",
         color: "#9fb0d0",
       })
@@ -90,7 +126,7 @@ export class GameOverScene extends Phaser.Scene {
 
     const scoreText = this.add
       .text(GAME_WIDTH / 2, 362, "0.0 dtk", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_DISPLAY,
         fontSize: "84px",
         color: "#7CFC8A",
         fontStyle: "bold",
@@ -108,8 +144,8 @@ export class GameOverScene extends Phaser.Scene {
     if (pb.isNew) {
       const badge = this.add
         .text(GAME_WIDTH / 2, 432, "★ REKOR BARU! ★", {
-          fontFamily: "system-ui, sans-serif",
-          fontSize: "30px",
+          fontFamily: FONT_DISPLAY,
+          fontSize: "34px",
           color: "#ffd54f",
           fontStyle: "bold",
         })
@@ -117,11 +153,15 @@ export class GameOverScene extends Phaser.Scene {
         .setAlpha(0);
       this.tweens.add({ targets: badge, alpha: 1, delay: 700, duration: 200 });
       this.tweens.add({ targets: badge, scale: 1.12, delay: 900, duration: 420, yoyo: true, repeat: -1 });
-      this.time.delayedCall(700, () => Sfx.newRecord());
+      this.time.delayedCall(700, () => {
+        Sfx.newRecord();
+        fx.confetti();
+      });
+      this.time.delayedCall(1500, () => hero.setExpression("happy"));
     } else {
       this.add
         .text(GAME_WIDTH / 2, 432, `Rekor kamu: ${pb.best.toFixed(1)} dtk`, {
-          fontFamily: "system-ui, sans-serif",
+          fontFamily: FONT_UI,
           fontSize: "24px",
           color: "#6b7aa0",
         })
@@ -148,7 +188,7 @@ export class GameOverScene extends Phaser.Scene {
     c.add(
       this.add
         .text(GAME_WIDTH / 2, 500, "Tulis inisialmu (4 huruf)", {
-          fontFamily: "system-ui, sans-serif",
+          fontFamily: FONT_UI,
           fontSize: "30px",
           color: "#e8f0ff",
           fontStyle: "bold",
@@ -204,7 +244,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.msgText = this.add
       .text(GAME_WIDTH / 2, 1032, "", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "24px",
         color: "#ff8a80",
       })
@@ -247,7 +287,7 @@ export class GameOverScene extends Phaser.Scene {
     draw(false);
     const t = this.add
       .text(0, -2, label, {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "36px",
         color: "#ffffff",
         fontStyle: "bold",
@@ -369,15 +409,15 @@ export class GameOverScene extends Phaser.Scene {
 
     this.boardHeader = this.add
       .text(GAME_WIDTH / 2, 482, "", {
-        fontFamily: "system-ui, sans-serif",
-        fontSize: "30px",
+        fontFamily: FONT_DISPLAY,
+        fontSize: "34px",
         color: "#ffd54f",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
     this.boardSub = this.add
       .text(GAME_WIDTH / 2, 520, "", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "21px",
         color: "#9fb0d0",
       })
@@ -386,8 +426,8 @@ export class GameOverScene extends Phaser.Scene {
     addPeriodTabs(this, GAME_WIDTH / 2, 572, period, (p) => this.renderPeriod(p));
     this.renderPeriod(period);
 
-    makeButton(this, 220, 1160, "MAIN LAGI", () => this.scene.start("Game", { retry: true }), { width: 300 });
-    makeButton(this, 530, 1160, "MENU", () => this.scene.start("Menu"), { width: 240, color: 0x37406b });
+    makeButton(this, 220, 1160, "MAIN LAGI", () => goTo(this, "Game", { retry: true }), { width: 300 });
+    makeButton(this, 530, 1160, "MENU", () => goTo(this, "Menu"), { width: 240, color: 0x37406b });
   }
 
   private renderPeriod(period: Period): void {

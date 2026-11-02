@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { FONT_UI } from "../config/theme";
 import { PERIODS, PERIOD_LABEL, type Period } from "../data/leaderboard";
 import { Sfx } from "../audio/Sfx";
 
@@ -35,7 +36,7 @@ export function addPeriodTabs(
     const x = -width / 2 + segW * (i + 0.5);
     const t = scene.add
       .text(x, 0, PERIOD_LABEL[p], {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "26px",
         color: "#9fb0d0",
         fontStyle: "bold",

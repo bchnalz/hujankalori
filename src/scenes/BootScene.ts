@@ -3,6 +3,7 @@ import { DummyDataProvider } from "../data/DummyDataProvider";
 import { isEmbedded, parseUserFromToken, readLaperToken } from "../data/laperBridge";
 import type { GameUser } from "../data/types";
 import { getSavedGender } from "../data/prefs";
+import { loadFonts } from "../config/theme";
 
 /**
  * Resolves the player identity up front, then hands off to Preload.
@@ -29,6 +30,7 @@ export class BootScene extends Phaser.Scene {
 
     this.registry.set("user", user);
     this.registry.set("embedded", isEmbedded());
+    await loadFonts();
     this.scene.start("Start");
   }
 }

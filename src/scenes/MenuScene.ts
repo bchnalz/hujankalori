@@ -1,6 +1,9 @@
 import Phaser from "phaser";
-import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
-import { BACKGROUND, UI } from "../config/assetManifest";
+import { addBackdrop } from "../ui/Backdrop";
+import { FONT_UI } from "../config/theme";
+import { fadeInScene, goTo } from "../ui/transition";
+import { GAME_WIDTH } from "../config/gameConfig";
+import { UI } from "../config/assetManifest";
 import { PLAYER_BASES } from "../config/playerConfig";
 import type { GameUser, Gender } from "../data/types";
 import { isTutorialDone, saveGender } from "../data/prefs";
@@ -23,13 +26,13 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.fadeIn(400, 0, 0, 0);
+    fadeInScene(this, 400);
     this.cards = {};
     Sfx.playMusic("menu");
 
     const user = this.registry.get("user") as GameUser;
 
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setDepth(-2);
+    addBackdrop(this, { horizon: 1160, dim: 0.5 });
 
     new WeatherFx(this, {
       rainDepth: -1,
@@ -42,7 +45,7 @@ export class MenuScene extends Phaser.Scene {
       rainVolume: 0.05,
       thunderVolume: 0.7,
       boltChance: 0.45,
-      boltDepth: -0.8,
+      boltDepth: -8.5,
       boltTargetY: [360, 560],
     });
 
@@ -53,7 +56,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(GAME_WIDTH / 2, 470, "Pilih jagoanmu", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "32px",
         color: "#e8f0ff",
         fontStyle: "bold",
@@ -66,21 +69,23 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(GAME_WIDTH / 2, 806, "Tangkap olahraga, hindari kalori berlebih.", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "24px",
-        color: "#9fb0d0",
+        color: "#c9d4ec",
+        stroke: "#070b18",
+        strokeThickness: 6,
       })
       .setOrigin(0.5);
 
     makeButton(this, GAME_WIDTH / 2, 940, "MAIN", () => {
-      this.scene.start(isTutorialDone() ? "Game" : "Tutorial", { firstTime: true });
+      goTo(this, isTutorialDone() ? "Game" : "Tutorial", { firstTime: true });
     }, { width: 360 });
-    makeButton(this, GAME_WIDTH / 2 - 150, 1080, "PERINGKAT", () => this.scene.start("Leaderboard"), {
+    makeButton(this, GAME_WIDTH / 2 - 150, 1080, "PERINGKAT", () => goTo(this, "Leaderboard"), {
       width: 280,
       height: 90,
       color: 0x37406b,
     });
-    makeButton(this, GAME_WIDTH / 2 + 150, 1080, "CARA MAIN", () => this.scene.start("Tutorial", { firstTime: false }), {
+    makeButton(this, GAME_WIDTH / 2 + 150, 1080, "CARA MAIN", () => goTo(this, "Tutorial", { firstTime: false }), {
       width: 280,
       height: 90,
       color: 0x37406b,
@@ -98,7 +103,7 @@ export class MenuScene extends Phaser.Scene {
     if (this.anims.exists(idle)) sprite.play(idle);
     const text = this.add
       .text(x, CARD_Y + CARD_H / 2 - 32, label, {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "26px",
         color: "#ffffff",
         fontStyle: "bold",

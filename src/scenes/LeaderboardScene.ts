@@ -1,6 +1,8 @@
 import Phaser from "phaser";
+import { addBackdrop } from "../ui/Backdrop";
+import { FONT_DISPLAY, FONT_UI } from "../config/theme";
+import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
-import { BACKGROUND } from "../config/assetManifest";
 import { fetchBoard, getSavedInitials, PERIOD_LABEL, type Period } from "../data/leaderboard";
 import { makeButton } from "../ui/Button";
 import { addMuteToggle } from "../ui/MuteToggle";
@@ -25,9 +27,9 @@ export class LeaderboardScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.fadeIn(250, 0, 0, 0);
+    fadeInScene(this);
     this.panel = undefined;
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setDepth(-2);
+    addBackdrop(this, { horizon: 1140, dim: 0.3 });
     new WeatherFx(this, {
       rainDepth: -1,
       flashDepth: 145,
@@ -43,7 +45,7 @@ export class LeaderboardScene extends Phaser.Scene {
 
     this.add
       .text(GAME_WIDTH / 2, 120, "PERINGKAT", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_DISPLAY,
         fontSize: "68px",
         color: "#ffffff",
         fontStyle: "bold",
@@ -51,7 +53,7 @@ export class LeaderboardScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.add
       .text(GAME_WIDTH / 2, 182, "Waktu bertahan terlama • skor terbaik per inisial", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "22px",
         color: "#9fb0d0",
       })
@@ -61,11 +63,11 @@ export class LeaderboardScene extends Phaser.Scene {
     addPeriodTabs(this, GAME_WIDTH / 2, 244, initial, (p) => this.loadPeriod(p));
 
     this.status = this.add
-      .text(GAME_WIDTH / 2, 600, "", { fontFamily: "system-ui, sans-serif", fontSize: "28px", color: "#9fb0d0" })
+      .text(GAME_WIDTH / 2, 600, "", { fontFamily: FONT_UI, fontSize: "28px", color: "#9fb0d0" })
       .setOrigin(0.5);
     this.meText = this.add
       .text(GAME_WIDTH / 2, PANEL_TOP + ROWS * ROW_H + 72, "", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "24px",
         color: "#ffd54f",
         fontStyle: "bold",
@@ -73,7 +75,7 @@ export class LeaderboardScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 86, "KEMBALI", () => this.scene.start("Menu"), {
+    makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 86, "KEMBALI", () => goTo(this, "Menu"), {
       color: 0x37406b,
     });
 

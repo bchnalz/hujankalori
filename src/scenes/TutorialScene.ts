@@ -1,6 +1,8 @@
 import Phaser from "phaser";
+import { addBackdrop } from "../ui/Backdrop";
+import { FONT_UI } from "../config/theme";
+import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_HEIGHT, GAME_WIDTH, gameConfig } from "../config/gameConfig";
-import { BACKGROUND } from "../config/assetManifest";
 import { ITEMS_BY_TYPE, type ItemDef } from "../config/itemConfig";
 import { PLAYER_BASES } from "../config/playerConfig";
 import type { GameUser } from "../data/types";
@@ -12,6 +14,7 @@ import { Hud } from "../ui/Hud";
 import { StarveGauge } from "../ui/StarveGauge";
 import { WeatherFx } from "../ui/WeatherFx";
 import { makeButton } from "../ui/Button";
+import { Fx } from "../ui/Fx";
 import { addMuteToggle } from "../ui/MuteToggle";
 
 type Step = "move" | "activity" | "hunger" | "food" | "done";
@@ -38,6 +41,7 @@ export class TutorialScene extends Phaser.Scene {
   private player!: Player;
   private items!: Phaser.Physics.Arcade.Group;
   private hud!: Hud;
+  private fx!: Fx;
   private starve!: StarveGauge;
   private starveObjs: Phaser.GameObjects.GameObject[] = [];
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -74,7 +78,7 @@ export class TutorialScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.fadeIn(300, 0, 0, 0);
+    fadeInScene(this);
     this.step = "move";
     this.hp = 1300;
     this.hunger = HUNGER_TOTAL;
@@ -85,7 +89,7 @@ export class TutorialScene extends Phaser.Scene {
 
     const user = this.registry.get("user") as GameUser;
 
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND.key).setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setDepth(-2);
+    addBackdrop(this, { horizon: gameConfig.footer.top, groundDepth: 1, dim: 0.25 });
     new WeatherFx(this, {
       rainDepth: -1,
       flashDepth: 145,
@@ -97,12 +101,11 @@ export class TutorialScene extends Phaser.Scene {
     });
 
     const footerTop = gameConfig.footer.top;
-    const footer = this.add.graphics().setDepth(1);
-    footer.fillStyle(0x0b1020, 0.82).fillRect(0, footerTop, GAME_WIDTH, GAME_HEIGHT - footerTop);
-    footer.fillStyle(0x2a3450, 1).fillRect(0, footerTop, GAME_WIDTH, 5);
+    this.add.rectangle(GAME_WIDTH / 2, footerTop + 6 + (GAME_HEIGHT - footerTop) / 2, GAME_WIDTH, GAME_HEIGHT - footerTop - 6, 0x050814, 0.35).setDepth(1.05);
 
     this.player = new Player(this, PLAYER_BASES[user.gender].key);
     this.items = this.physics.add.group();
+    this.fx = new Fx(this);
     this.hud = new Hud(this);
     this.hud.update(this.hp, 0);
     this.hud.setTimerVisible(false);
@@ -151,7 +154,7 @@ export class TutorialScene extends Phaser.Scene {
     this.coachFace = this.add.graphics().setDepth(151);
     this.coachText = this.add
       .text(150, PANEL_Y + PANEL_H / 2 + 6, "", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "27px",
         color: "#ffffff",
         lineSpacing: 6,
@@ -327,7 +330,7 @@ export class TutorialScene extends Phaser.Scene {
     play.setScale(0.6).setAlpha(0);
     this.tweens.add({ targets: play, scale: 1, alpha: 1, duration: 320, ease: "Back.easeOut" });
     if (!this.firstTime) {
-      makeButton(this, GAME_WIDTH / 2, 780, "MENU", () => this.scene.start("Menu"), {
+      makeButton(this, GAME_WIDTH / 2, 780, "MENU", () => goTo(this, "Menu"), {
         width: 300,
         color: 0x37406b,
       }).setDepth(160);
@@ -336,7 +339,7 @@ export class TutorialScene extends Phaser.Scene {
 
   private finish(play = false): void {
     markTutorialDone();
-    this.scene.start(this.firstTime || play ? "Game" : "Menu");
+    goTo(this, this.firstTime || play ? "Game" : "Menu");
   }
 
   // ------------------------------------------------------------------ items
@@ -376,6 +379,8 @@ export class TutorialScene extends Phaser.Scene {
     if (def.type === "activity") {
       this.hp = Math.min(gameConfig.maxHp, this.hp + def.value);
       Sfx.catchGood(3);
+      this.player.react("happy");
+      this.fx.catchActivity(item.x, item.y);
       this.floatText(item.x, item.y, `+${def.value} kkal`, "#7CFC8A");
       item.collect();
       if (this.step === "activity") this.completeStep("Mantap! Lihat, batas kalorimu bertambah.");
@@ -383,6 +388,8 @@ export class TutorialScene extends Phaser.Scene {
       this.hp = Math.max(200, this.hp - def.value);
       this.hunger = HUNGER_TOTAL;
       Sfx.catchNeutral();
+      this.player.react("chew", 750, 0.1);
+      this.fx.catchHealthy(item.x, item.y);
       this.floatText(item.x, item.y, `-${def.value} kkal`, "#ffd54f");
       item.collect();
       if (this.step === "hunger") this.completeStep("Kenyang! Timer lapar penuh lagi, kalorinya pun kecil.");
@@ -390,6 +397,9 @@ export class TutorialScene extends Phaser.Scene {
       this.hp = Math.max(200, this.hp - def.value);
       this.hunger = HUNGER_TOTAL;
       Sfx.catchBad();
+      this.player.react("shock", 700, 0.2);
+      this.player.art.flash(0xff4d4d);
+      this.fx.catchJunk(item.x, item.y);
       this.cameras.main.shake(140, 0.006);
       this.floatText(item.x, item.y, `-${def.value} kkal`, "#ff6b6b");
       item.collect();
@@ -419,7 +429,7 @@ export class TutorialScene extends Phaser.Scene {
 
   private floatText(x: number, y: number, text: string, color: string): void {
     const t = this.add
-      .text(x, y, text, { fontFamily: "system-ui, sans-serif", fontSize: "34px", color, fontStyle: "bold" })
+      .text(x, y, text, { fontFamily: FONT_UI, fontSize: "34px", color, fontStyle: "bold" })
       .setOrigin(0.5)
       .setDepth(90);
     this.tweens.add({ targets: t, y: y - 90, alpha: 0, duration: 800, ease: "Cubic.easeOut", onComplete: () => t.destroy() });
@@ -466,6 +476,7 @@ export class TutorialScene extends Phaser.Scene {
       const item = child as FallingItem;
       if (this.marker && item.getData("marked")) this.marker.setPosition(item.x, item.y - 90);
       if (item.y > cullY) {
+        this.fx.splash(item.x, cullY + 10);
         this.onMissed(item);
         item.destroy();
       }

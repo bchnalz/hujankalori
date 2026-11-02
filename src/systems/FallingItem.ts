@@ -37,6 +37,12 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
     const r = Math.min(srcW, srcH) * 0.42;
     body.setCircle(r, srcW / 2 - r, srcH / 2 - r);
 
+    // pop in as it appears
+    const sx = this.scaleX;
+    const sy = this.scaleY;
+    this.setScale(sx * 0.25, sy * 0.25);
+    this.scene.tweens.add({ targets: this, scaleX: sx, scaleY: sy, duration: 240, ease: "Back.easeOut" });
+
     if (this.floaty) {
       body.setVelocityY(speed * FLOAT.speedFactor);
       this.swayPhase = Math.random() * Math.PI * 2;
@@ -46,7 +52,9 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
       this.bubble = this.scene.add
         .circle(this.x, this.y, radius, FLOAT.bubble.color, FLOAT.bubble.alpha)
         .setStrokeStyle(FLOAT.bubble.strokeWidth, FLOAT.bubble.strokeColor, FLOAT.bubble.strokeAlpha)
-        .setDepth(1);
+        .setDepth(1)
+        .setScale(0.25);
+      this.scene.tweens.add({ targets: this.bubble, scale: 1, duration: 240, ease: "Back.easeOut" });
     } else {
       body.setVelocityY(speed);
     }

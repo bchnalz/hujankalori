@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { FONT_DISPLAY, FONT_UI } from "../config/theme";
 import { GAME_WIDTH, gameConfig } from "../config/gameConfig";
 
 export const STARVE_CX = GAME_WIDTH - 96;
@@ -23,8 +24,8 @@ export class StarveGauge {
     this.g = scene.add.graphics().setDepth(100);
     this.num = scene.add
       .text(CX, CY, "", {
-        fontFamily: "system-ui, sans-serif",
-        fontSize: "40px",
+        fontFamily: FONT_DISPLAY,
+        fontSize: "44px",
         color: "#ffffff",
         fontStyle: "bold",
       })
@@ -32,7 +33,7 @@ export class StarveGauge {
       .setDepth(102);
     this.label = scene.add
       .text(CX, CY + R + 16, "LAPAR", {
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: FONT_UI,
         fontSize: "20px",
         color: "#cfd8e6",
         fontStyle: "bold",
