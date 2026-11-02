@@ -1122,7 +1122,7 @@ const GARDEN_DARKNESS = (() => {
 })();
 
 /**
- * RSUD front garden on a rainy late afternoon: tall cypress trees, a dense
+ * RSUD central garden (in the middle of the hospital) on a rainy late afternoon: tall cypress trees, a dense
  * tree line, a white ward building with a red cross on the left, a pendopo
  * (red tiled hip roof, white pillars, hanging red lanterns) on the right,
  * slender shade trees, a log planter, river stones, the lawn and the
