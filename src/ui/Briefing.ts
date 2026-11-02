@@ -8,7 +8,15 @@ import { makeButton } from "./Button";
 const PANEL_X = 40;
 const PANEL_Y = 340;
 const PANEL_W = GAME_WIDTH - 80;
-const PANEL_H = 610;
+const PANEL_H = 730;
+// In-panel mini versions of the HUD widgets
+const MINI_BAR_W = 520;
+const MINI_BAR_H = 44;
+const MINI_BAR_X = (GAME_WIDTH - MINI_BAR_W) / 2;
+const MINI_BAR_Y = PANEL_Y + 92;
+const MINI_DONUT_X = GAME_WIDTH / 2;
+const MINI_DONUT_Y = PANEL_Y + 432;
+const MINI_DONUT_R = 50;
 const HUNGER_DEMO_TOTAL = 12;
 
 /**
@@ -42,7 +50,7 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   const bg = scene.add.graphics();
   bg.fillStyle(0x0b1020, 0.96).fillRoundedRect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, 28);
   bg.lineStyle(4, 0x2a3450, 1).strokeRoundedRect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, 28);
-  bg.lineStyle(2, 0x2a3450, 1).lineBetween(PANEL_X + 40, PANEL_Y + 262, PANEL_X + PANEL_W - 40, PANEL_Y + 262);
+  bg.lineStyle(2, 0x2a3450, 1).lineBetween(PANEL_X + 40, PANEL_Y + 300, PANEL_X + PANEL_W - 40, PANEL_Y + 300);
   panel.add(bg);
 
   const heading = (y: number, text: string, color: string): Phaser.GameObjects.Text =>
@@ -68,11 +76,69 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
       .setOrigin(0.5, 0)
       .setAlpha(0);
 
-  const hA = heading(PANEL_Y + 64, "BATAS KALORI HARIAN", "#7CFC8A");
-  const tA = body(PANEL_Y + 108, "Ini adalah batas kalori harian Anda. Bila habis, perut Anda sudah kekenyangan!");
-  const hB = heading(PANEL_Y + 318, "TIMER LAPAR", "#FFD54F");
-  const tB = body(PANEL_Y + 362, "Tapi jangan sampai nggak makan ya, nanti kamu pingsan!");
+  const hA = heading(PANEL_Y + 52, "BATAS KALORI HARIAN", "#7CFC8A");
+  const tA = body(PANEL_Y + 158, "Ini adalah batas kalori harian Anda. Bila habis, perut Anda sudah kekenyangan!");
+  const hB = heading(PANEL_Y + 344, "TIMER LAPAR", "#FFD54F");
+  const tB = body(PANEL_Y + 502, "Tapi jangan sampai nggak makan ya, nanti kamu pingsan!");
   panel.add([hA, tA, hB, tB]);
+
+  // Mini calorie bar
+  const miniBar = scene.add.graphics().setAlpha(0);
+  const miniBarText = scene.add
+    .text(GAME_WIDTH / 2, MINI_BAR_Y + MINI_BAR_H / 2, "", {
+      fontFamily: "system-ui, sans-serif",
+      fontSize: "24px",
+      color: "#ffffff",
+      fontStyle: "bold",
+      stroke: "#0b1020",
+      strokeThickness: 5,
+    })
+    .setOrigin(0.5)
+    .setAlpha(0);
+  const drawMiniBar = (v: number): void => {
+    const ratio = Phaser.Math.Clamp(v / gameConfig.maxHp, 0, 1);
+    miniBar.clear();
+    miniBar.fillStyle(0x10131c, 1).fillRoundedRect(MINI_BAR_X, MINI_BAR_Y, MINI_BAR_W, MINI_BAR_H, 12);
+    if (ratio > 0) {
+      miniBar.fillStyle(0x4caf50, 1).fillRoundedRect(MINI_BAR_X, MINI_BAR_Y, Math.max(20, MINI_BAR_W * ratio), MINI_BAR_H, 12);
+      miniBar.fillStyle(0xffffff, 0.16).fillRoundedRect(MINI_BAR_X + 6, MINI_BAR_Y + 5, Math.max(10, MINI_BAR_W * ratio - 12), MINI_BAR_H * 0.28, 8);
+    }
+    miniBar.lineStyle(3, 0x2a3450, 1).strokeRoundedRect(MINI_BAR_X, MINI_BAR_Y, MINI_BAR_W, MINI_BAR_H, 12);
+    miniBarText.setText(`${Math.round(v)} / ${gameConfig.maxHp} kkal`);
+  };
+  drawMiniBar(0);
+
+  // Mini hunger donut
+  const miniDonut = scene.add.graphics().setAlpha(0);
+  const miniDonutNum = scene.add
+    .text(MINI_DONUT_X, MINI_DONUT_Y, "", {
+      fontFamily: "system-ui, sans-serif",
+      fontSize: "34px",
+      color: "#ffffff",
+      fontStyle: "bold",
+    })
+    .setOrigin(0.5)
+    .setAlpha(0);
+  const drawMiniDonut = (remaining: number): void => {
+    const ratio = Phaser.Math.Clamp(remaining / HUNGER_DEMO_TOTAL, 0, 1);
+    const low = remaining <= gameConfig.starvation.warnSeconds;
+    const color = low ? 0xe53935 : ratio < 0.5 ? 0xffb300 : 0x4caf50;
+    miniDonut.clear();
+    miniDonut.fillStyle(0x10131c, 1).fillCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R);
+    if (ratio > 0) {
+      const start = -Math.PI / 2;
+      miniDonut.fillStyle(color, 1);
+      miniDonut.beginPath();
+      miniDonut.slice(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R, start, start + Math.PI * 2 * ratio, false);
+      miniDonut.closePath();
+      miniDonut.fillPath();
+    }
+    miniDonut.fillStyle(0x10131c, 1).fillCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R * 0.55);
+    miniDonut.lineStyle(3, 0x2a3450, 1).strokeCircle(MINI_DONUT_X, MINI_DONUT_Y, MINI_DONUT_R + 3);
+    miniDonutNum.setText(`${Math.ceil(remaining)}`).setColor(low ? "#ff6b6b" : "#ffffff");
+  };
+  drawMiniDonut(HUNGER_DEMO_TOTAL);
+  panel.add([miniBar, miniBarText, miniDonut, miniDonutNum]);
 
   // Highlights + pointer arrows (above the HUD)
   const barFrame = keep(scene.add.graphics().setDepth(104).setAlpha(0));
@@ -108,7 +174,7 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   // ---- 1: calorie bar fills
   scene.time.delayedCall(420, () => {
     Sfx.pop();
-    show([hA, tA]);
+    show([hA, tA, miniBar, miniBarText]);
     show(barArrow);
     bob(barArrow);
     barFrame.setAlpha(1);
@@ -122,9 +188,14 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
       v: gameConfig.maxHp,
       duration: FILL_MS,
       ease: "Cubic.easeOut",
-      onUpdate: () => hud.update(fill.v, 0),
+      onUpdate: () => {
+        hud.update(fill.v, 0);
+        drawMiniBar(fill.v);
+      },
       onComplete: () => {
         hud.update(gameConfig.maxHp, 0);
+        drawMiniBar(gameConfig.maxHp);
+        scene.tweens.add({ targets: miniBarText, scale: 1.25, duration: 140, yoyo: true });
         Sfx.ding();
         flash.setAlpha(0.8);
         scene.tweens.add({ targets: flash, alpha: 0, duration: 450 });
@@ -136,7 +207,9 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
   // ---- 2: hunger donut pops in, drains, refills
   const step2 = (): void => {
     Sfx.pop();
-    show([hB, tB]);
+    show([hB, tB, miniDonut, miniDonutNum]);
+    miniDonutNum.setScale(0.4);
+    scene.tweens.add({ targets: miniDonutNum, scale: 1, duration: 300, ease: "Back.easeOut" });
     starve.setAlpha(1);
     show(gaugeArrow);
     bob(gaugeArrow);
@@ -153,6 +226,7 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
       ease: "Sine.easeIn",
       onUpdate: () => {
         starve.update(demo.t, HUNGER_DEMO_TOTAL);
+        drawMiniDonut(demo.t);
         const whole = Math.ceil(demo.t);
         if (whole !== lastWhole) {
           lastWhole = whole;
@@ -169,7 +243,10 @@ export function runBriefing(scene: Phaser.Scene, hud: Hud, starve: StarveGauge, 
           t: HUNGER_DEMO_TOTAL,
           duration: 450,
           ease: "Back.easeOut",
-          onUpdate: () => starve.update(refill.t, HUNGER_DEMO_TOTAL),
+          onUpdate: () => {
+            starve.update(refill.t, HUNGER_DEMO_TOTAL);
+            drawMiniDonut(refill.t);
+          },
           onComplete: () => {
             Sfx.ding();
             scene.time.delayedCall(350, step3);

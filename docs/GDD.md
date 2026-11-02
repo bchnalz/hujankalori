@@ -35,14 +35,15 @@ play system (later passes).
   paham? Lewati" skips at any time. Retries from Game Over go straight to the
   countdown.
 - **Briefing popup** (`src/ui/Briefing.ts`): before the countdown, the field
-  dims while the real HUD stays lit. The calorie bar fills to full ("Ini adalah
+  dims while the real HUD stays lit; the popup also shows its own mini calorie
+  bar and mini hunger donut next to each explanation. The calorie bar fills to full ("Ini adalah
   batas kalori harian Anda. Bila habis, perut Anda sudah kekenyangan!"), then the
   hunger donut pops in and drains in a quick demo before refilling ("Tapi jangan
   sampai nggak makan ya, nanti kamu pingsan!"), then a **SIAP!** button starts
   the countdown. Every motion has a sound. "MAIN LAGI" retries skip it.
 - **Combo:** each activity or healthy item caught in a row raises a combo
   (COMBO xN above the player, a ring burst, a rising jingle and a badge under the
-  timer); every 5th gets a big "MANTAP!"-style callout. Catching heavy food breaks
+  timer); every 5th gets a big callout that always fits the screen: x5 "NTAP!", x10 "AURA FARMING!", x15 "LET HIM COOK!", x20 "KING!", x25 "MASIH LANJUT?!", x30 and beyond "G.O.A.T.!". Catching heavy food breaks
   it ("Combo putus!"). Visual/audio only — no score effect.
 - **Catch feed:** the footer shows what was just caught (larger icon and text);
   the newest row is on top and the previous one slides down and dims, so quick
