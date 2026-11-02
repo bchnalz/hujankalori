@@ -40,15 +40,30 @@ for (const ev of ["pointerup", "touchend", "click", "keydown"]) {
   document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
 }
 
-// Dynamic-viewport handling: keep the canvas filling the *visible* area as the
-// mobile browser address bar shows/hides (visualViewport), and re-fit on rotate.
-const applyViewport = (): void => {
-  const app = document.getElementById("app");
-  const vv = window.visualViewport;
-  if (app && vv) app.style.height = `${vv.height}px`;
-  game.scale.refresh();
+// Viewport handling for mobile browsers.
+// #app is position:fixed + inset:0 (see index.html), so it always matches the
+// *layout* viewport. That follows the address bar collapsing/expanding, but —
+// unlike visualViewport — it does not shrink when iOS Safari opens its
+// keyboard/URL editor. We used to size the game to visualViewport.height, so
+// tapping the address bar on an iPhone shrank the game and Safari didn't always
+// report the size coming back. Now we only re-fit and undo any page scroll.
+let fitTimer = 0;
+const refit = (): void => {
+  window.clearTimeout(fitTimer);
+  fitTimer = window.setTimeout(() => {
+    if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+    game.scale.refresh();
+  }, 120);
 };
-window.visualViewport?.addEventListener("resize", applyViewport);
-window.visualViewport?.addEventListener("scroll", applyViewport);
-window.addEventListener("orientationchange", () => window.setTimeout(applyViewport, 250));
-applyViewport();
+window.addEventListener("resize", refit);
+window.addEventListener("orientationchange", () => {
+  refit();
+  window.setTimeout(refit, 500); // iOS reports the final size late after rotating
+});
+window.visualViewport?.addEventListener("resize", refit);
+window.addEventListener("pageshow", refit);
+window.addEventListener("focus", refit);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refit();
+});
+refit();
