@@ -155,12 +155,23 @@ function saveLocalRun(name: string, score: number): void {
 // ------------------------------------------------------------------- public
 
 /** Ask the server to open a run session. Null when offline/unavailable. */
+/** Anonymous random id for this browser (no personal data) — for unique-device counts. */
+function deviceId(): string {
+  const KEY = "hk_did";
+  let id = store()?.getItem(KEY) ?? "";
+  if (!/^[a-z0-9]{8,32}$/.test(id)) {
+    id = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
+    store()?.setItem(KEY, id);
+  }
+  return id;
+}
+
 export async function startRun(): Promise<string | null> {
   try {
     const { sid } = await api<{ sid: string }>({
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "start" }),
+      body: JSON.stringify({ action: "start", did: deviceId() }),
     });
     return sid ?? null;
   } catch {
