@@ -82,6 +82,14 @@ Vercel → Settings → Environment Variables and redeploy. From the panel you c
 - review the last submissions with the real session duration — runs whose score
   is almost the whole session (no time spent typing initials) are tagged **cek**.
 
+The panel also shows **play statistics**: total runs, runs today, unique
+devices and average runs per device, plus a 14-day chart (WIB days). A run is
+counted when the server opens its run session (when "MULAI!" appears);
+devices are counted from a random per-browser id (`hk_did`, no personal data)
+with Redis HyperLogLog. Keys: `hk:stats:plays[:<date>]`,
+`hk:stats:submits[:<date>]`, `hk:stats:dev[:<date>]` (daily keys kept ~13
+months). Counting starts when this is deployed.
+
 Ten wrong passwords from one IP lock the panel for 15 minutes. API:
 `api/admin.ts` (`x-admin-key` header).
 

@@ -68,6 +68,15 @@
       .empty { color: var(--dim); padding: 14px 4px; }
       .row-form { display: flex; gap: 8px; margin-top: 12px; }
       .row-form input { max-width: 140px; text-transform: uppercase; }
+      .chart { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 6px; }
+      .bar { display: flex; flex-direction: column; min-width: 0; }
+      .bar .track { height: 150px; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; }
+      .bar b { text-align: center; font-size: 11px; color: var(--muted); font-weight: 700; line-height: 16px; height: 16px; font-variant-numeric: tabular-nums; }
+      .bar i { display: block; background: var(--green); border-radius: 6px 6px 2px 2px; min-height: 2px; }
+      .bar i.today { background: var(--green-hi); }
+      .bar span { display: block; text-align: center; font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.2; white-space: nowrap; }
+      .bar span small { display: block; font-size: 10px; }
+      @media (max-width: 720px) { .chart { gap: 3px; } .bar b { font-size: 10px; } }
       .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; }
       .toast.show { opacity: 1; }
       @media (max-width: 720px) {
@@ -99,6 +108,18 @@
             <button id="logout" class="btn ghost sm">Keluar</button>
           </div>
         </header>
+
+        <div class="card">
+          <h2>Statistik permainan</h2>
+          <div class="stats" style="margin-bottom:14px">
+            <div class="stat"><b id="pAll">–</b><span>Total permainan</span></div>
+            <div class="stat"><b id="pToday">–</b><span>Permainan hari ini</span></div>
+            <div class="stat"><b id="pDev">–</b><span>Perangkat unik</span></div>
+            <div class="stat"><b id="pAvg">–</b><span>Rata-rata main per perangkat</span></div>
+          </div>
+          <div id="chart" class="chart" role="img" aria-label="Jumlah permainan per hari, 14 hari terakhir"></div>
+          <p class="dim" id="statsNote" style="margin-bottom:0"></p>
+        </div>
 
         <div class="stats">
           <div class="stat"><b id="sDay">–</b><span>Pemain hari ini</span></div>
@@ -240,7 +261,34 @@
           }
         }
 
+        function renderStats(st) {
+          if (!st) return;
+          const today = st.days[st.days.length - 1] || { plays: 0 };
+          $("pAll").textContent = fmt(st.plays);
+          $("pToday").textContent = fmt(today.plays);
+          $("pDev").textContent = fmt(st.devices);
+          $("pAvg").textContent = st.devices ? (st.plays / st.devices).toLocaleString("id-ID", { maximumFractionDigits: 1 }) : "–";
+          const max = Math.max(1, ...st.days.map((x) => x.plays));
+          const chart = $("chart");
+          chart.innerHTML = "";
+          st.days.forEach((x, i) => {
+            const pct = Math.round((x.plays / max) * 100);
+            const day = new Date(x.date + "T00:00:00+07:00");
+            const label = day.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short" });
+            const dnum = day.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric" });
+            const mon = day.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", month: "short" });
+            const showMon = i === 0 || dnum === "1";
+            const el = document.createElement("div");
+            el.className = "bar";
+            el.title = `${label}: ${fmt(x.plays)} permainan, ${fmt(x.devices)} perangkat, ${fmt(x.submits)} skor dikirim`;
+            el.innerHTML = `<div class="track"><b>${x.plays ? fmt(x.plays) : ""}</b><i class="${i === st.days.length - 1 ? "today" : ""}" style="height:calc((100% - 16px) * ${pct / 100})"></i></div><span>${dnum}${showMon ? `<small>${mon}</small>` : ""}</span>`;
+            chart.appendChild(el);
+          });
+          $("statsNote").textContent = `Skor dikirim: ${fmt(st.submits)} dari ${fmt(st.plays)} permainan. Dihitung sejak fitur statistik aktif; perangkat dihitung dari ID acak per browser (tanpa data pribadi).`;
+        }
+
         function render(d) {
+          renderStats(d.stats);
           $("sDay").textContent = fmt(d.summary.day);
           $("sWeek").textContent = fmt(d.summary.week);
           $("sAll").textContent = fmt(d.summary.all);

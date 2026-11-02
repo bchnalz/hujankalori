@@ -63,6 +63,13 @@ const WIB_OFFSET_MS = 7 * 3600 * 1000;
 const BANNED_KEY = "hk:banned";
 const LOG_KEY = "hk:log";
 const LOG_KEEP = 500;
+// Play statistics (counted when a run starts / a score is submitted).
+const STATS_TTL = 400 * 86400; // keep daily counters ~13 months
+
+/** YYYY-MM-DD on the WIB calendar. */
+function wibDate(now = Date.now()): string {
+  return new Date(now + WIB_OFFSET_MS).toISOString().slice(0, 10);
+}
 
 // Initials that are not allowed on the public board (ID + EN).
 const BLOCKED = new Set([
@@ -214,7 +221,23 @@ export default async function handler(req: Req, res: Res): Promise<void> {
           return;
         }
         const sid = newSessionId();
-        await kv([["SET", `hk:s:${sid}`, Date.now(), "EX", SESSION_TTL]]);
+        const day = wibDate();
+        const did = typeof b.did === "string" && /^[a-z0-9]{8,32}$/.test(b.did) ? b.did : "";
+        const cmds: (string | number)[][] = [
+          ["SET", `hk:s:${sid}`, Date.now(), "EX", SESSION_TTL],
+          ["INCR", "hk:stats:plays"],
+          ["INCR", `hk:stats:plays:${day}`],
+          ["EXPIRE", `hk:stats:plays:${day}`, STATS_TTL],
+        ];
+        if (did) {
+          // anonymous random device id -> unique-device counts (HyperLogLog)
+          cmds.push(
+            ["PFADD", "hk:stats:dev", did],
+            ["PFADD", `hk:stats:dev:${day}`, did],
+            ["EXPIRE", `hk:stats:dev:${day}`, STATS_TTL],
+          );
+        }
+        await kv(cmds);
         res.status(200).json({ sid });
         return;
       }
@@ -288,6 +311,8 @@ export default async function handler(req: Req, res: Res): Promise<void> {
       // Recent-submissions log for the admin panel (IP masked to /24).
       const log = JSON.stringify({ n: name, s: score, t: now, r: Math.round(realSec * 10) / 10, ip: maskIp(ip) });
       cmds.push(["LPUSH", LOG_KEY, log], ["LTRIM", LOG_KEY, 0, LOG_KEEP - 1]);
+      const day = wibDate(now);
+      cmds.push(["INCR", "hk:stats:submits"], ["INCR", `hk:stats:submits:${day}`], ["EXPIRE", `hk:stats:submits:${day}`, STATS_TTL]);
       const out = await kv(cmds);
 
       const periods = {} as Record<Period, Standing>;

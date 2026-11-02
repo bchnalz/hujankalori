@@ -39,7 +39,12 @@ const ADMIN_PASSWORD = env.ADMIN_PASSWORD ?? "";
 const WIB_OFFSET_MS = 7 * 3600 * 1000;
 const BANNED_KEY = "hk:banned";
 const LOG_KEY = "hk:log";
-const MAX_FAILS = 10; // wrong passwords per IP per 15 minutes
+const MAX_FAILS = 10;
+const STATS_DAYS = 14;
+
+function wibDate(now = Date.now()): string {
+  return new Date(now + WIB_OFFSET_MS).toISOString().slice(0, 10);
+} // wrong passwords per IP per 15 minutes
 
 async function kv(commands: (string | number)[][]): Promise<unknown[]> {
   const r = await fetch(`${KV_URL}/pipeline`, {
@@ -136,6 +141,30 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         ["SMEMBERS", BANNED_KEY],
         ["LRANGE", LOG_KEY, 0, 149],
       ]);
+
+      // Play statistics: totals + the last STATS_DAYS days (WIB).
+      const days: string[] = [];
+      for (let i = STATS_DAYS - 1; i >= 0; i--) days.push(wibDate(Date.now() - i * 86400000));
+      const st = await kv([
+        ["MGET", "hk:stats:plays", "hk:stats:submits", ...days.map((d) => `hk:stats:plays:${d}`)],
+        ["MGET", ...days.map((d) => `hk:stats:submits:${d}`)],
+        ["PFCOUNT", "hk:stats:dev"],
+        ...days.map((d) => ["PFCOUNT", `hk:stats:dev:${d}`]),
+      ]);
+      const n = (v: unknown): number => Number(v ?? 0) || 0;
+      const head = (st[0] as unknown[]) ?? [];
+      const subs = (st[1] as unknown[]) ?? [];
+      const stats = {
+        plays: n(head[0]),
+        submits: n(head[1]),
+        devices: n(st[2]),
+        days: days.map((date, i) => ({
+          date,
+          plays: n(head[2 + i]),
+          submits: n(subs[i]),
+          devices: n(st[3 + i]),
+        })),
+      };
       const flat = (out[0] as string[]) ?? [];
       let entries: Array<{ rank: number; name: string; score: number }> = [];
       for (let i = 0; i + 1 < flat.length; i += 2) {
@@ -158,6 +187,7 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         entries,
         banned: ((out[4] as string[]) ?? []).sort(),
         log,
+        stats,
       });
       return;
     }
