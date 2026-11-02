@@ -386,7 +386,7 @@ export class GameOverScene extends Phaser.Scene {
     addPeriodTabs(this, GAME_WIDTH / 2, 572, period, (p) => this.renderPeriod(p));
     this.renderPeriod(period);
 
-    makeButton(this, 220, 1160, "MAIN LAGI", () => this.scene.start("Game"), { width: 300 });
+    makeButton(this, 220, 1160, "MAIN LAGI", () => this.scene.start("Game", { retry: true }), { width: 300 });
     makeButton(this, 530, 1160, "MENU", () => this.scene.start("Menu"), { width: 240, color: 0x37406b });
   }
 

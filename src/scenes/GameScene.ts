@@ -14,6 +14,7 @@ import { addMuteToggle } from "../ui/MuteToggle";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { startRun } from "../data/leaderboard";
+import { runBriefing } from "../ui/Briefing";
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -45,9 +46,21 @@ export class GameScene extends Phaser.Scene {
   private weather!: WeatherFx;
   private combo = 0;
   private nextWarnBeep = 0;
+  /** Pre-round popup is open (nothing moves). */
+  private briefing = false;
+  private showBriefing = true;
+  private comboText?: Phaser.GameObjects.Text;
+  private comboBadge!: Phaser.GameObjects.Text;
+  private feed: Phaser.GameObjects.Container[] = [];
+  private floats: Array<{ obj: Phaser.GameObjects.Text; at: number }> = [];
 
   constructor() {
     super("Game");
+  }
+
+  init(data: { retry?: boolean }): void {
+    // Quick retries from Game Over skip the briefing popup.
+    this.showBriefing = !data?.retry;
   }
 
   create(): void {
@@ -65,6 +78,9 @@ export class GameScene extends Phaser.Scene {
     this.runSid = Promise.resolve(null);
     this.combo = 0;
     this.nextWarnBeep = 0;
+    this.feed = [];
+    this.floats = [];
+    this.comboText = undefined;
 
     const user = this.registry.get("user") as GameUser;
     const baseKey = PLAYER_BASES[user.gender].key;
@@ -142,8 +158,30 @@ export class GameScene extends Phaser.Scene {
     this.hud.update(0, 0);
     this.starve.update(this.starveTimer, this.starveTotal);
 
-    addMuteToggle(this, 60, 150);
-    this.addPauseButton(60, 236);
+    this.comboBadge = this.add
+      .text(GAME_WIDTH / 2, 152, "", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "28px",
+        color: "#FFD54F",
+        fontStyle: "bold",
+        stroke: "#0b1020",
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setDepth(102)
+      .setVisible(false);
+
+    if (this.showBriefing) {
+      this.briefing = true;
+      this.countdownText.setVisible(false);
+      runBriefing(this, this.hud, this.starve, () => {
+        this.briefing = false;
+        this.countdownText.setVisible(true);
+      });
+    }
+
+    addMuteToggle(this, 60, 172);
+    this.addPauseButton(60, 258);
 
     // Leaving the app/tab pauses the run so no time is gained while away.
     const onHidden = (): void => this.pauseGame();
@@ -167,14 +205,15 @@ export class GameScene extends Phaser.Scene {
 
     this.applyHp(delta);
     if (def.type === "food") {
-      this.combo = 0;
       Sfx.catchBad();
       this.cameras.main.shake(140, 0.006);
-    } else if (def.type === "activity") {
-      Sfx.catchGood(this.combo);
-      this.combo++;
+      this.breakCombo();
     } else {
-      Sfx.catchNeutral();
+      // Activities and healthy food both build the combo.
+      if (def.type === "activity") Sfx.catchGood(this.combo);
+      else Sfx.catchNeutral();
+      this.combo++;
+      if (this.combo >= 2) this.showCombo(this.combo);
     }
     if (def.type !== "activity") {
       this.starveTotal = starveWindow(this.elapsed);
@@ -186,9 +225,13 @@ export class GameScene extends Phaser.Scene {
     item.collect();
   }
 
+  /**
+   * Footer "what did I just eat/do" feed: newest row on top, the previous one
+   * slides down and dims, older rows leave — so quick catches never overlap.
+   */
   private showCatchPopup(textureKey: string, label: string, delta: number): void {
-    const cx = GAME_WIDTH / 2;
-    const cy = gameConfig.footer.popupY;
+    const ROW1 = gameConfig.footer.top + 72;
+    const ROW_GAP = 92;
 
     let color = "#ff6b6b";
     let sign = "";
@@ -199,36 +242,110 @@ export class GameScene extends Phaser.Scene {
       color = "#cfd8e6";
     }
 
-    const icon = this.add.image(cx - 96, cy, textureKey).setDisplaySize(56, 56).setDepth(120);
+    const icon = this.add.image(0, 0, textureKey).setDisplaySize(80, 80);
     const name = this.add
-      .text(cx - 58, cy - 16, label, {
+      .text(56, -20, label, {
         fontFamily: "system-ui, sans-serif",
-        fontSize: "26px",
+        fontSize: "34px",
         color: "#ffffff",
         fontStyle: "bold",
       })
-      .setOrigin(0, 0.5)
-      .setDepth(120);
+      .setOrigin(0, 0.5);
     const eff = this.add
-      .text(cx - 58, cy + 14, delta === 0 ? "netral" : `${sign}${Math.round(delta)} kkal`, {
+      .text(56, 22, delta === 0 ? "netral" : `${sign}${Math.round(delta)} kkal`, {
         fontFamily: "system-ui, sans-serif",
-        fontSize: "22px",
+        fontSize: "30px",
         color,
         fontStyle: "bold",
       })
-      .setOrigin(0, 0.5)
-      .setDepth(120);
+      .setOrigin(0, 0.5);
+    const width = 56 + Math.max(name.width, eff.width);
+    const row = this.add.container(GAME_WIDTH / 2 - width / 2 + 40, ROW1, [icon, name, eff]).setDepth(120);
 
-    const group = [icon, name, eff];
-    group.forEach((o) => o.setAlpha(0));
-    this.tweens.add({ targets: group, alpha: 1, y: "-=10", duration: 140, ease: "Quad.easeOut" });
-    this.tweens.add({
-      targets: group,
-      alpha: 0,
-      delay: 650,
-      duration: 250,
-      onComplete: () => group.forEach((o) => o.destroy()),
+    // push older rows down
+    this.feed = this.feed.filter((r) => r.active);
+    this.feed.forEach((r, k) => {
+      this.tweens.killTweensOf(r);
+      if (k >= 1) {
+        this.tweens.add({ targets: r, alpha: 0, duration: 120, onComplete: () => r.destroy() });
+      } else {
+        this.tweens.add({ targets: r, y: ROW1 + ROW_GAP, alpha: 0.5, scale: 0.86, duration: 160, ease: "Quad.easeOut" });
+        this.tweens.add({ targets: r, alpha: 0, delay: 900, duration: 250, onComplete: () => r.destroy() });
+      }
     });
+    this.feed = [row, ...this.feed.slice(0, 1)];
+
+    row.setAlpha(0).setScale(1.12);
+    this.tweens.add({ targets: row, alpha: 1, scale: 1, duration: 150, ease: "Quad.easeOut" });
+    this.tweens.add({ targets: row, alpha: 0, delay: 1500, duration: 300, onComplete: () => row.destroy() });
+  }
+
+  private showCombo(n: number): void {
+    Sfx.combo(n);
+    const size = Math.min(44 + n * 3, 76);
+    this.comboText?.destroy();
+    const t = (this.comboText = this.add
+      .text(this.player.x, this.player.y - 130, `COMBO x${n}`, {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: `${size}px`,
+        color: n >= 5 ? "#FFD54F" : "#7CFC8A",
+        fontStyle: "bold",
+        stroke: "#0b1020",
+        strokeThickness: 8,
+      })
+      .setOrigin(0.5)
+      .setDepth(130));
+    t.setScale(1.8);
+    this.tweens.add({ targets: t, scale: 1, duration: 260, ease: "Back.easeOut" });
+    this.tweens.add({ targets: t, y: t.y - 70, alpha: 0, delay: 500, duration: 450, onComplete: () => t.destroy() });
+
+    // expanding ring around the player
+    const ring = this.add.circle(this.player.x, this.player.y, 40).setStrokeStyle(6, n >= 5 ? 0xffd54f : 0x7cfc8a, 1).setDepth(89);
+    this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 420, ease: "Cubic.easeOut", onComplete: () => ring.destroy() });
+
+    this.comboBadge.setText(`COMBO x${n}`).setVisible(true);
+    this.comboBadge.setScale(1.3);
+    this.tweens.add({ targets: this.comboBadge, scale: 1, duration: 200, ease: "Back.easeOut" });
+
+    if (n % 5 === 0) {
+      const words = ["MANTAP!", "LUAR BIASA!", "TAK TERBENDUNG!", "LEGENDA!"];
+      const big = this.add
+        .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, words[Math.min(n / 5 - 1, words.length - 1)], {
+          fontFamily: "system-ui, sans-serif",
+          fontSize: "84px",
+          color: "#FFD54F",
+          fontStyle: "bold",
+          stroke: "#0b1020",
+          strokeThickness: 10,
+        })
+        .setOrigin(0.5)
+        .setDepth(135)
+        .setScale(0.3)
+        .setAlpha(0);
+      this.tweens.add({ targets: big, scale: 1, alpha: 1, duration: 300, ease: "Back.easeOut" });
+      this.tweens.add({ targets: big, alpha: 0, scale: 1.2, delay: 750, duration: 350, onComplete: () => big.destroy() });
+      this.cameras.main.flash(160, 255, 230, 140);
+    }
+  }
+
+  private breakCombo(): void {
+    if (this.combo >= 3) {
+      Sfx.comboBreak();
+      const t = this.add
+        .text(this.player.x, this.player.y - 130, "Combo putus!", {
+          fontFamily: "system-ui, sans-serif",
+          fontSize: "38px",
+          color: "#cfd8e6",
+          fontStyle: "bold",
+          stroke: "#0b1020",
+          strokeThickness: 7,
+        })
+        .setOrigin(0.5)
+        .setDepth(130);
+      this.tweens.add({ targets: t, y: t.y + 40, alpha: 0, delay: 350, duration: 450, onComplete: () => t.destroy() });
+    }
+    this.combo = 0;
+    this.comboBadge.setVisible(false);
   }
 
   private applyHp(delta: number): void {
@@ -247,19 +364,28 @@ export class GameScene extends Phaser.Scene {
       color = "#cfd8e6";
     }
 
+    // Stack above recent nearby floats so two quick catches don't overlap.
+    const now = this.time.now;
+    this.floats = this.floats.filter((f) => f.obj.active && now - f.at < 600);
+    const nearby = this.floats.filter((f) => Math.abs(f.obj.x - x) < 200).length;
+    const y0 = y - nearby * 52;
+
     const txt = this.add
-      .text(x, y, `${sign}${Math.round(delta)} kkal`, {
+      .text(x, y0, `${sign}${Math.round(delta)} kkal`, {
         fontFamily: "system-ui, sans-serif",
-        fontSize: "34px",
+        fontSize: "40px",
         color,
         fontStyle: "bold",
+        stroke: "#0b1020",
+        strokeThickness: 6,
       })
       .setOrigin(0.5)
       .setDepth(90);
+    this.floats.push({ obj: txt, at: now });
 
     this.tweens.add({
       targets: txt,
-      y: y - 90,
+      y: y0 - 90,
       alpha: 0,
       duration: 700,
       ease: "Cubic.easeOut",
@@ -268,7 +394,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, rawDelta: number): void {
-    if (this.ended || this.paused) return;
+    if (this.ended || this.paused || this.briefing) return;
 
     // Clamp so a long frame (e.g. returning from background) can't add time.
     const delta = Math.min(rawDelta, 100);
@@ -333,9 +459,13 @@ export class GameScene extends Phaser.Scene {
     this.introElapsed += delta;
     const cfg = gameConfig.intro;
 
-    const fillT = Phaser.Math.Clamp(this.introElapsed / cfg.countMs, 0, 1);
-    const eased = Phaser.Math.Easing.Cubic.Out(fillT);
-    this.hud.update(eased * gameConfig.maxHp, 0);
+    if (this.showBriefing) {
+      this.hud.update(gameConfig.maxHp, 0); // already filled in the briefing
+    } else {
+      const fillT = Phaser.Math.Clamp(this.introElapsed / cfg.countMs, 0, 1);
+      const eased = Phaser.Math.Easing.Cubic.Out(fillT);
+      this.hud.update(eased * gameConfig.maxHp, 0);
+    }
 
     const countdown = Math.max(1, Math.ceil((cfg.countMs - this.introElapsed) / 1000));
     const label = this.introElapsed < cfg.countMs ? `${countdown}` : "MULAI!";

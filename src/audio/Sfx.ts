@@ -418,6 +418,78 @@ class SfxEngine {
     this.tone(notes[3] / 2, t + 0.66, 0.8, { type: "triangle", vol: 0.18 });
   }
 
+  /** Panel sliding in/out. */
+  whoosh(out = false): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.32, {
+      filter: "bandpass",
+      freq: out ? 2600 : 500,
+      freqTo: out ? 500 : 2600,
+      q: 1.2,
+      vol: 0.22,
+      attack: 0.08,
+    });
+  }
+
+  /** Rising sweep while a bar fills over `dur` seconds. */
+  fillSweep(dur = 1.2): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.tone(220, t, dur, { type: "square", vol: 0.07, to: 880, attack: 0.05 });
+    this.tone(330, t, dur, { type: "triangle", vol: 0.08, to: 1320, attack: 0.05 });
+    // little ticks along the way
+    const n = Math.round(dur * 10);
+    for (let i = 0; i < n; i++) this.tone(600 + i * 40, t + (i * dur) / n, 0.03, { type: "square", vol: 0.04 });
+  }
+
+  /** Bright "full!" chime. */
+  ding(): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.tone(1319, t, 0.5, { type: "sine", vol: 0.2 });
+    this.tone(1976, t + 0.02, 0.4, { type: "sine", vol: 0.09 });
+    this.tone(2637, t + 0.04, 0.3, { type: "triangle", vol: 0.05 });
+  }
+
+  /** Element popping into view. */
+  pop(): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.tone(300, t, 0.09, { type: "sine", vol: 0.22, to: 900 });
+    this.tone(1200, t + 0.05, 0.06, { type: "triangle", vol: 0.06 });
+  }
+
+  /** Soft clock tick (hunger demo). */
+  tick(): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.035, { filter: "bandpass", freq: 3200, q: 4, vol: 0.18, attack: 0.002 });
+    this.tone(1800, t, 0.03, { type: "square", vol: 0.04 });
+  }
+
+  /** Combo jingle; pitch climbs with the streak, milestones get a flourish. */
+  combo(n: number): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+    const base = 523 * Math.pow(2, scale[Math.min(n - 2, scale.length - 1)] / 12);
+    this.tone(base, t, 0.08, { type: "square", vol: 0.1 });
+    this.tone(base * 1.25, t + 0.06, 0.08, { type: "square", vol: 0.1 });
+    this.tone(base * 1.5, t + 0.12, 0.16, { type: "square", vol: 0.11 });
+    if (n % 5 === 0) {
+      this.tone(base * 2, t + 0.2, 0.3, { type: "triangle", vol: 0.14 });
+      this.noise(t + 0.2, 0.25, { filter: "highpass", freq: 6000, vol: 0.08 });
+    }
+  }
+
+  comboBreak(): void {
+    if (!this.ready()) return;
+    const t = this.ctx!.currentTime;
+    this.tone(440, t, 0.12, { type: "square", vol: 0.1, to: 330 });
+    this.tone(330, t + 0.12, 0.2, { type: "square", vol: 0.1, to: 220 });
+  }
+
   type(): void {
     if (!this.ready()) return;
     const t = this.ctx!.currentTime;

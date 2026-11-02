@@ -34,6 +34,19 @@ play system (later passes).
   timer refills) → dodge heavy food. Nothing in it can end the game; "Sudah
   paham? Lewati" skips at any time. Retries from Game Over go straight to the
   countdown.
+- **Briefing popup** (`src/ui/Briefing.ts`): before the countdown, the field
+  dims while the real HUD stays lit. The calorie bar fills to full ("Ini adalah
+  batas kalori harian Anda. Bila habis, perut Anda sudah kekenyangan!"), then the
+  hunger donut pops in and drains in a quick demo before refilling ("Tapi jangan
+  sampai nggak makan ya, nanti kamu pingsan!"), then a **SIAP!** button starts
+  the countdown. Every motion has a sound. "MAIN LAGI" retries skip it.
+- **Combo:** each activity or healthy item caught in a row raises a combo
+  (COMBO xN above the player, a ring burst, a rising jingle and a badge under the
+  timer); every 5th gets a big "MANTAP!"-style callout. Catching heavy food breaks
+  it ("Combo putus!"). Visual/audio only — no score effect.
+- **Catch feed:** the footer shows what was just caught (larger icon and text);
+  the newest row is on top and the previous one slides down and dims, so quick
+  catches never overlap. Floating "+/- kkal" texts stack upward when close.
 - **Countdown intro:** every run begins with a **3-2-1 → MULAI!** counter while
   the HP bar animates from **0 → 100%**. Spawning, the survival timer, and the
   starvation timer only start after "MULAI!". Tunable via `gameConfig.intro`
