@@ -4,9 +4,9 @@ import { FONT_UI } from "../config/theme";
 import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_HEIGHT, GAME_WIDTH, gameConfig } from "../config/gameConfig";
 import { ITEMS_BY_TYPE, type ItemDef } from "../config/itemConfig";
-import { PLAYER_BASES } from "../config/playerConfig";
+import { ensureCharacter } from "../objects/CharacterSprite";
 import type { GameUser } from "../data/types";
-import { markTutorialDone } from "../data/prefs";
+import { getUniform, markTutorialDone } from "../data/prefs";
 import { Sfx } from "../audio/Sfx";
 import { Player } from "../objects/Player";
 import { FallingItem } from "../systems/FallingItem";
@@ -103,7 +103,7 @@ export class TutorialScene extends Phaser.Scene {
     const footerTop = gameConfig.footer.top;
     this.add.rectangle(GAME_WIDTH / 2, footerTop + 6 + (GAME_HEIGHT - footerTop) / 2, GAME_WIDTH, GAME_HEIGHT - footerTop - 6, 0x050814, 0.35).setDepth(1.05);
 
-    this.player = new Player(this, PLAYER_BASES[user.gender].key);
+    this.player = new Player(this, ensureCharacter(this, user.gender, getUniform()));
     this.items = this.physics.add.group();
     this.fx = new Fx(this);
     this.hud = new Hud(this);

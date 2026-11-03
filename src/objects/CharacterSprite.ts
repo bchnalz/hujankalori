@@ -1,0 +1,613 @@
+import Phaser from "phaser";
+import type { Gender } from "../data/types";
+
+/**
+ * Procedurally drawn player character (chibi style) in one of the RSUD staff
+ * uniforms. Drawn on a canvas so every gender × uniform combination comes
+ * from the same proportions, and the face overlay in CharacterArt lines up.
+ *
+ * Coordinates are in the 128-unit frame the face anchors use; the canvas is
+ * drawn at `RES`× for crisp edges on high-DPI phones.
+ */
+
+export type Uniform = "umum" | "dokter" | "ok" | "penunjang" | "batik" | "korpri";
+export const UNIFORMS: Uniform[] = ["umum", "dokter", "ok", "penunjang", "batik", "korpri"];
+export const UNIFORM_LABEL: Record<Uniform, string> = {
+  umum: "Bagian Umum",
+  dokter: "Dokter",
+  ok: "Perawat OK",
+  penunjang: "Penunjang",
+  batik: "Batik Corona",
+  korpri: "Korpri",
+};
+
+export const SPRITE_UNIT = 128;
+export const RES = 2;
+export const FRAMES = 4;
+/** Upper-body bob per idle frame (matches the face overlay in CharacterArt). */
+export const BOB = [0, -3, 0, 3];
+
+const INK = "#2b1d14";
+const SKIN = "#f3cba5";
+const SKIN_SHADE = "#e2ad86";
+
+interface Look {
+  top: string;
+  topShade: string;
+  bottom: string;
+  bottomShade: string;
+  collar?: string;
+}
+
+const LOOKS: Record<Uniform, Look> = {
+  umum: { top: "#dcc196", topShade: "#c4a676", bottom: "#5b3e2b", bottomShade: "#47301f", collar: "#cfb283" },
+  dokter: { top: "#f7f9fc", topShade: "#d9e0ea", bottom: "#7d838d", bottomShade: "#646a73" },
+  ok: { top: "#3a9c7c", topShade: "#2d7f64", bottom: "#3a9c7c", bottomShade: "#2d7f64" },
+  penunjang: { top: "#2e4793", topShade: "#233873", bottom: "#2a4189", bottomShade: "#1f3268", collar: "#3a58ad" },
+  batik: { top: "#17171c", topShade: "#0f0f13", bottom: "#1f1f24", bottomShade: "#141418" },
+  korpri: { top: "#2a64bd", topShade: "#1f4f99", bottom: "#23283a", bottomShade: "#181c2a" },
+};
+
+/** Canvas with all idle frames side by side (FRAMES × 128·RES wide). */
+export function drawCharacterSheet(gender: Gender, uniform: Uniform): HTMLCanvasElement {
+  const S = SPRITE_UNIT * RES;
+  const c = document.createElement("canvas");
+  c.width = S * FRAMES;
+  c.height = S;
+  const ctx = c.getContext("2d")!;
+  for (let f = 0; f < FRAMES; f++) {
+    ctx.save();
+    ctx.translate(f * S, 0);
+    ctx.scale(RES, RES);
+    drawFrame(ctx, gender, uniform, f);
+    ctx.restore();
+  }
+  return c;
+}
+
+function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+}
+
+function fillStroke(ctx: CanvasRenderingContext2D, fill: string | CanvasGradient | CanvasPattern, lw = 1.6): void {
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+}
+
+function vgrad(ctx: CanvasRenderingContext2D, y0: number, y1: number, a: string, b: string): CanvasGradient {
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, a);
+  g.addColorStop(1, b);
+  return g;
+}
+
+function tile(ctx: CanvasRenderingContext2D, size: number, draw: (g: CanvasRenderingContext2D) => void): CanvasPattern {
+  const t = document.createElement("canvas");
+  t.width = size * RES;
+  t.height = size * RES;
+  const g = t.getContext("2d")!;
+  g.scale(RES, RES);
+  draw(g);
+  const pat = ctx.createPattern(t, "repeat")!;
+  pat.setTransform(new DOMMatrix().scale(1 / RES));
+  return pat;
+}
+
+/** Batik: black ground with white corona-virus motifs outlined in maroon. */
+function batikPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
+  return tile(ctx, 22, (g) => {
+    g.fillStyle = "#141418";
+    g.fillRect(0, 0, 22, 22);
+    const virus = (cx: number, cy: number, r: number): void => {
+      g.strokeStyle = "#8a1f2a";
+      g.lineWidth = 0.7;
+      g.fillStyle = "#f3f1ec";
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + 0.2;
+        g.beginPath();
+        g.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+        g.lineTo(cx + Math.cos(a) * (r + r * 0.45), cy + Math.sin(a) * (r + r * 0.45));
+        g.strokeStyle = "#f3f1ec";
+        g.lineWidth = r * 0.22;
+        g.stroke();
+        g.beginPath();
+        g.arc(cx + Math.cos(a) * r * 1.55, cy + Math.sin(a) * r * 1.55, r * 0.26, 0, Math.PI * 2);
+        g.strokeStyle = "#8a1f2a";
+        g.lineWidth = 0.6;
+        g.fill();
+        g.stroke();
+      }
+      g.beginPath();
+      g.arc(cx, cy, r, 0, Math.PI * 2);
+      g.fill();
+      g.lineWidth = 0.8;
+      g.stroke();
+      g.fillStyle = "#8a1f2a";
+      for (const [dx, dy] of [[-0.45, -0.3], [0.4, 0.15], [-0.1, 0.5]]) {
+        g.beginPath();
+        g.arc(cx + dx * r, cy + dy * r, r * 0.16, 0, Math.PI * 2);
+        g.fill();
+      }
+    };
+    virus(6, 6, 3.4);
+    virus(17, 17, 3.4);
+    virus(17, 5, 1.6);
+    virus(5, 17, 1.6);
+  });
+}
+
+/** Korpri batik: blue ground with a light tree-and-wing motif. */
+function korpriPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
+  return tile(ctx, 16, (g) => {
+    g.fillStyle = "#2a64bd";
+    g.fillRect(0, 0, 16, 16);
+    const tree = (cx: number, cy: number): void => {
+      g.fillStyle = "#e8f1ff";
+      g.fillRect(cx - 0.4, cy - 1, 0.8, 3.2);
+      for (const [dx, dy, r] of [[0, -2.4, 1.3], [-1.4, -1.2, 1], [1.4, -1.2, 1]]) {
+        g.beginPath();
+        g.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+        g.fill();
+      }
+      // wings
+      g.strokeStyle = "#a9c8f3";
+      g.lineWidth = 0.6;
+      for (const sgn of [-1, 1]) {
+        for (let k = 0; k < 3; k++) {
+          g.beginPath();
+          g.moveTo(cx + sgn * 1.6, cy + 0.6 + k * 0.8);
+          g.lineTo(cx + sgn * (3.4 - k * 0.5), cy - 0.4 + k * 0.9);
+          g.stroke();
+        }
+      }
+    };
+    tree(4, 5);
+    tree(12, 13);
+    g.fillStyle = "#9fc0ee";
+    for (const [x, y] of [[12, 4], [4, 12], [8, 8]]) {
+      g.beginPath();
+      g.arc(x, y, 0.6, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+}
+
+function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f: number): void {
+  const L = LOOKS[u];
+  const bob = BOB[f];
+  const swing = [0, -1, 0, 1][f];
+  const female = gender === "female";
+  const ok = u === "ok";
+
+  // ---- ground shadow
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath();
+  ctx.ellipse(64, 125, 26, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ---- legs + shoes (fixed to the ground)
+  const legTop = 96 + bob * 0.5;
+  for (const x of [46, 65]) {
+    rr(ctx, x, legTop, 17, 122 - legTop, 4);
+    fillStroke(ctx, vgrad(ctx, legTop, 122, L.bottom, L.bottomShade));
+  }
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(63, legTop + 2, 2, 120 - legTop);
+  for (const x of [44, 64]) {
+    rr(ctx, x, 117, 20, 8, 4);
+    fillStroke(ctx, ok ? "#e9eef2" : "#26201d");
+    ctx.fillStyle = ok ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.18)";
+    ctx.fillRect(x + 3, 118, 9, 2);
+  }
+
+  // everything above the legs bobs
+  ctx.save();
+  ctx.translate(0, bob);
+
+  // ---- long hair behind the body (female, not under the OK cap)
+  if (female && !ok) {
+    ctx.beginPath();
+    ctx.moveTo(41, 34);
+    ctx.quadraticCurveTo(38, 62, 44, 70);
+    ctx.lineTo(84, 70);
+    ctx.quadraticCurveTo(90, 62, 87, 34);
+    ctx.closePath();
+    fillStroke(ctx, vgrad(ctx, 30, 70, "#4a2c1d", "#38200f"));
+  }
+
+  // ---- arms (behind torso edge), swing a little
+  const torsoTop = 58;
+  for (const [x, dir] of [
+    [29, -1],
+    [87, 1],
+  ] as const) {
+    ctx.save();
+    ctx.translate(x + 6, torsoTop + 4);
+    ctx.rotate((swing * dir * 2 * Math.PI) / 180);
+    rr(ctx, -6, -2, 12, 34, 6);
+    fillStroke(ctx, u === "batik" ? batikPattern(ctx) : u === "korpri" ? korpriPattern(ctx) : vgrad(ctx, 0, 34, L.top, L.topShade));
+    // short-sleeve scrubs show the forearm
+    if (ok || u === "penunjang") {
+      rr(ctx, -5, 18, 10, 14, 5);
+      fillStroke(ctx, SKIN, 1.2);
+    }
+    if (u === "penunjang") {
+      // red piping at the sleeve end
+      ctx.fillStyle = "#d8262e";
+      ctx.fillRect(-6, 15.2, 12, 2.6);
+    }
+    ctx.beginPath();
+    ctx.arc(0, 35, 6.2, 0, Math.PI * 2);
+    fillStroke(ctx, SKIN, 1.4);
+    ctx.restore();
+  }
+
+  // ---- torso
+  rr(ctx, 38, torsoTop, 52, 42, 12);
+  const torsoFill = u === "batik" ? batikPattern(ctx) : u === "korpri" ? korpriPattern(ctx) : vgrad(ctx, torsoTop, torsoTop + 42, L.top, L.topShade);
+  fillStroke(ctx, torsoFill, 1.8);
+  // side shading
+  ctx.save();
+  rr(ctx, 38, torsoTop, 52, 42, 12);
+  ctx.clip();
+  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  ctx.fillRect(80, torsoTop, 12, 42);
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(42, torsoTop + 2, 8, 30);
+  ctx.restore();
+
+  // uniform details
+  if (u === "umum") {
+    // shirt collar, button placket, chest pockets
+    ctx.fillStyle = L.collar!;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(64, torsoTop + 9);
+      ctx.lineTo(64 + s * 12, torsoTop - 1);
+      ctx.lineTo(64 + s * 4, torsoTop - 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(43,29,20,0.5)";
+    ctx.beginPath();
+    ctx.moveTo(64, torsoTop + 9);
+    ctx.lineTo(64, torsoTop + 42);
+    ctx.stroke();
+    ctx.fillStyle = "#f1e4c8";
+    for (let y = torsoTop + 14; y < torsoTop + 40; y += 8) {
+      ctx.beginPath();
+      ctx.arc(64, y, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (const x of [46, 70]) {
+      rr(ctx, x, torsoTop + 12, 12, 10, 2);
+      ctx.strokeStyle = "rgba(43,29,20,0.45)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  } else if (u === "dokter") {
+    // light-blue shirt and tie showing between the open lab-coat lapels
+    ctx.fillStyle = "#cfe3f7";
+    ctx.beginPath();
+    ctx.moveTo(57, torsoTop - 1);
+    ctx.lineTo(71, torsoTop - 1);
+    ctx.lineTo(66, torsoTop + 42);
+    ctx.lineTo(62, torsoTop + 42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#3f5f9e";
+    ctx.beginPath();
+    ctx.moveTo(62.5, torsoTop + 3);
+    ctx.lineTo(65.5, torsoTop + 3);
+    ctx.lineTo(66.5, torsoTop + 22);
+    ctx.lineTo(64, torsoTop + 26);
+    ctx.lineTo(61.5, torsoTop + 22);
+    ctx.closePath();
+    ctx.fill();
+    // lapels
+    ctx.fillStyle = "#eef2f8";
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(64 + sgn * 7, torsoTop - 1);
+      ctx.lineTo(64 + sgn * 15, torsoTop - 1);
+      ctx.lineTo(64 + sgn * 9, torsoTop + 16);
+      ctx.lineTo(64 + sgn * 3, torsoTop + 24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    // coat edges + pockets + pen
+    ctx.strokeStyle = "rgba(43,29,20,0.4)";
+    ctx.lineWidth = 1;
+    for (const x of [61, 67]) {
+      ctx.beginPath();
+      ctx.moveTo(x, torsoTop + 24);
+      ctx.lineTo(x, torsoTop + 42);
+      ctx.stroke();
+    }
+    rr(ctx, 44, torsoTop + 27, 12, 9, 2);
+    ctx.stroke();
+    rr(ctx, 72, torsoTop + 12, 11, 8, 2);
+    ctx.stroke();
+    ctx.fillStyle = "#2f6fd1";
+    ctx.fillRect(74, torsoTop + 8, 2, 6);
+    // stethoscope
+    ctx.strokeStyle = "#3a3f48";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(56, torsoTop + 1);
+    ctx.quadraticCurveTo(52, torsoTop + 18, 58, torsoTop + 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(72, torsoTop + 1);
+    ctx.quadraticCurveTo(76, torsoTop + 14, 74, torsoTop + 22);
+    ctx.stroke();
+    ctx.fillStyle = "#c9d1dc";
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(74, torsoTop + 24, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (ok) {
+    // scrub V-neck + chest pocket
+    ctx.fillStyle = SKIN;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(56, torsoTop - 1);
+    ctx.lineTo(64, torsoTop + 11);
+    ctx.lineTo(72, torsoTop - 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    rr(ctx, 70, torsoTop + 16, 11, 9, 2);
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.stroke();
+  } else if (u === "penunjang") {
+    // polo collar + placket
+    ctx.fillStyle = L.collar!;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(64, torsoTop + 3);
+      ctx.lineTo(64 + s * 11, torsoTop - 1);
+      ctx.lineTo(64 + s * 9, torsoTop + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (u === "batik" || u === "korpri") {
+    if (u === "korpri") {
+      // gold Korpri pin on the left chest
+      const px = 76;
+      const py = torsoTop + 12;
+      ctx.fillStyle = "#f2c94c";
+      ctx.strokeStyle = "#8a6416";
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(px, py, 3.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#8a6416";
+      ctx.fillRect(px - 0.35, py - 0.5, 0.7, 2.6);
+      for (const [dx, dy, r] of [[0, -1.6, 0.9], [-1.1, -0.7, 0.7], [1.1, -0.7, 0.7]]) {
+        ctx.beginPath();
+        ctx.arc(px + dx, py + dy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.beginPath();
+      ctx.arc(px - 1.4, py - 1.6, 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // collar band + buttons
+    rr(ctx, 54, torsoTop - 1, 20, 5, 2);
+    fillStroke(ctx, u === "batik" ? "#5c1a20" : "#1b3f80", 1.2);
+    ctx.fillStyle = "#f3f1ec";
+    for (let y = torsoTop + 10; y < torsoTop + 40; y += 8) {
+      ctx.beginPath();
+      ctx.arc(64, y, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ---- neck + head
+  rr(ctx, 58, 52, 12, 9, 3);
+  fillStroke(ctx, SKIN_SHADE, 1.2);
+  ctx.beginPath();
+  ctx.ellipse(64, 38, 22, 21, 0, 0, Math.PI * 2);
+  fillStroke(ctx, SKIN, 1.8);
+  // ears (long hair covers them)
+  for (const x of female && !ok ? [] : [42, 86]) {
+    ctx.beginPath();
+    ctx.ellipse(x, 41, 3.2, 4.4, 0, 0, Math.PI * 2);
+    fillStroke(ctx, SKIN, 1.2);
+  }
+
+  // ---- hair / OK cap
+  if (ok) {
+    // surgical bouffant cap
+    ctx.beginPath();
+    ctx.moveTo(41, 36);
+    ctx.quadraticCurveTo(38, 12, 64, 11);
+    ctx.quadraticCurveTo(90, 12, 87, 36);
+    ctx.quadraticCurveTo(64, 28, 41, 36);
+    ctx.closePath();
+    fillStroke(ctx, vgrad(ctx, 11, 36, "#4fb592", "#358f71"), 1.8);
+    ctx.strokeStyle = "rgba(0,0,0,0.2)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(43, 33);
+    ctx.quadraticCurveTo(64, 26, 85, 33);
+    ctx.stroke();
+    // surgical mask (covers mouth and cheeks; the face overlay draws eyes only)
+    ctx.beginPath();
+    ctx.moveTo(47, 46.5);
+    ctx.quadraticCurveTo(64, 44, 81, 46.5);
+    ctx.quadraticCurveTo(82, 58, 64, 60);
+    ctx.quadraticCurveTo(46, 58, 47, 46.5);
+    ctx.closePath();
+    fillStroke(ctx, vgrad(ctx, 45, 60, "#e8f6ff", "#bfe0f2"), 1.4);
+    ctx.strokeStyle = "rgba(60,110,140,0.45)";
+    ctx.lineWidth = 0.9;
+    for (const y of [51, 55]) {
+      ctx.beginPath();
+      ctx.moveTo(50, y);
+      ctx.quadraticCurveTo(64, y - 1.5, 78, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#cfe6f3";
+    ctx.lineWidth = 1.2;
+    for (const [a, b] of [
+      [47, 47.5],
+      [81, 47.5],
+    ]) {
+      ctx.beginPath();
+      ctx.moveTo(a, b);
+      ctx.lineTo(a < 64 ? 42 : 86, 40);
+      ctx.stroke();
+    }
+  } else if (female) {
+    // side locks in front of where the ears would be
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(64 + sgn * 18, 24);
+      ctx.quadraticCurveTo(64 + sgn * 26, 34, 64 + sgn * 24, 54);
+      ctx.quadraticCurveTo(64 + sgn * 21, 57, 64 + sgn * 18, 53);
+      ctx.quadraticCurveTo(64 + sgn * 20, 42, 64 + sgn * 16, 33);
+      ctx.closePath();
+      fillStroke(ctx, vgrad(ctx, 24, 56, "#4e2e1e", "#3a2113"), 1.6);
+    }
+    // full fringe that sits high on the head (no "bald" forehead)
+    ctx.beginPath();
+    ctx.moveTo(41, 40);
+    ctx.quadraticCurveTo(37, 13, 64, 12);
+    ctx.quadraticCurveTo(91, 13, 87, 40);
+    ctx.quadraticCurveTo(84, 30, 76, 27);
+    ctx.quadraticCurveTo(68, 31, 60, 27);
+    ctx.quadraticCurveTo(50, 29, 47, 34);
+    ctx.quadraticCurveTo(44, 36, 41, 40);
+    ctx.closePath();
+    fillStroke(ctx, vgrad(ctx, 12, 40, "#5a3624", "#3e2315"), 1.8);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.beginPath();
+    ctx.ellipse(55, 18, 7, 2.5, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // hair clip
+    ctx.fillStyle = "#ff7fa8";
+    rr(ctx, 76, 22, 7, 3, 1.5);
+    ctx.fill();
+  } else {
+    // short hair with a side part
+    ctx.beginPath();
+    ctx.moveTo(42, 37);
+    ctx.quadraticCurveTo(38, 14, 62, 13);
+    ctx.quadraticCurveTo(88, 12, 86, 36);
+    ctx.quadraticCurveTo(84, 28, 78, 25);
+    ctx.quadraticCurveTo(66, 30, 54, 25);
+    ctx.quadraticCurveTo(46, 28, 42, 37);
+    ctx.closePath();
+    fillStroke(ctx, vgrad(ctx, 12, 37, "#33241a", "#1f150e"), 1.8);
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.beginPath();
+    ctx.ellipse(56, 17, 8, 2.4, -0.25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/** Uniforms that cover the mouth (the face overlay draws eyes only). */
+export function isMasked(u: Uniform): boolean {
+  return u === "ok";
+}
+
+export function characterKey(gender: Gender, uniform: Uniform): string {
+  return `player_${gender}_${uniform}`;
+}
+
+/** Build (once) the spritesheet + idle animation for this look; returns the texture key. */
+export function ensureCharacter(scene: Phaser.Scene, gender: Gender, uniform: Uniform): string {
+  const key = characterKey(gender, uniform);
+  if (!scene.textures.exists(key)) {
+    const S = SPRITE_UNIT * RES;
+    const sheet = drawCharacterSheet(gender, uniform);
+    const tex = scene.textures.addCanvas(`${key}__src`, sheet)!;
+    scene.textures.addSpriteSheet(key, tex.getSourceImage() as HTMLImageElement, { frameWidth: S, frameHeight: S });
+  }
+  const idle = `${key}_idle`;
+  if (!scene.anims.exists(idle)) {
+    scene.anims.create({
+      key: idle,
+      frames: scene.anims.generateFrameNumbers(key, { start: 0, end: FRAMES - 1 }),
+      frameRate: 5,
+      repeat: -1,
+    });
+  }
+  return key;
+}
+
+/**
+ * Character as a single still image with a face (for the share card):
+ * frame 0, `size` px square, transparent background.
+ */
+export function drawCharacterPortrait(gender: Gender, uniform: Uniform, size: number, happy: boolean): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const x = c.getContext("2d")!;
+  const S = SPRITE_UNIT * RES;
+  x.drawImage(drawCharacterSheet(gender, uniform), 0, 0, S, S, 0, 0, size, size);
+  const k = size / SPRITE_UNIT;
+  const P = (px: number, py: number): [number, number] => [px * k, py * k];
+  x.strokeStyle = INK;
+  x.fillStyle = INK;
+  x.lineCap = "round";
+  x.lineWidth = 1.6 * k;
+  for (const ex of [56, 72]) {
+    const [a, b] = P(ex, happy ? 43.5 : 42);
+    x.beginPath();
+    if (happy) {
+      x.arc(a, b, 3 * k, Math.PI * 1.1, Math.PI * 1.9);
+      x.stroke();
+    } else {
+      x.arc(a, b, 2.6 * k, 0, Math.PI * 2);
+      x.fill();
+    }
+  }
+  if (!isMasked(uniform)) {
+    x.fillStyle = "rgba(255,138,149,0.55)";
+    for (const ex of [52, 76]) {
+      const [a, b] = P(ex, 48);
+      x.beginPath();
+      x.ellipse(a, b, 3 * k, 1.8 * k, 0, 0, Math.PI * 2);
+      x.fill();
+    }
+    const [mx, my] = P(64, 48.5);
+    x.fillStyle = INK;
+    x.beginPath();
+    if (happy) {
+      x.arc(mx, my, 5 * k, 0, Math.PI);
+      x.fill();
+      x.fillStyle = "#ff6f7d";
+      x.beginPath();
+      x.ellipse(mx, my + 1.6 * k, 2.2 * k, 1.1 * k, 0, 0, Math.PI * 2);
+      x.fill();
+    } else {
+      x.arc(mx, my - 2 * k, 4 * k, 0.44, 2.7);
+      x.stroke();
+    }
+  }
+  return c;
+}

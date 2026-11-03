@@ -26,13 +26,19 @@ export class CharacterArt extends Phaser.GameObjects.Container {
   private chewOpen = false;
   private chewTimer?: Phaser.Time.TimerEvent;
   private bob = 0;
+  /** Surgical mask on: no mouth / cheeks. */
+  private readonly masked: boolean;
   readonly baseScale: number;
 
   constructor(scene: Phaser.Scene, x: number, feetY: number, textureKey: string, displayHeight = 176) {
     super(scene, x, feetY);
     this.baseScale = displayHeight / FRAME;
+    this.masked = textureKey.endsWith("_ok");
 
     this.sprite = scene.add.sprite(0, 0, textureKey, 0).setOrigin(0.5, 1);
+    // sheets may be drawn at 2× for crisp edges; keep the 128-unit frame space
+    const fw = this.sprite.frame.width || FRAME;
+    this.sprite.setScale(FRAME / fw);
     this.face = scene.add.graphics();
     this.body2 = scene.add.container(0, 0, [this.sprite, this.face]).setScale(this.baseScale);
     this.add(this.body2);
@@ -113,6 +119,57 @@ export class CharacterArt extends Phaser.GameObjects.Container {
     this.drawFace();
   }
 
+  /** Eyes-only expressions above a surgical mask. */
+  private drawMaskedEyes(P: (p: { x: number; y: number }, dx?: number, dy?: number) => [number, number]): void {
+    const g = this.face;
+    const dot = (p: { x: number; y: number }, r: number): void => {
+      const [x, y] = P(p);
+      g.fillStyle(INK, 1).fillCircle(x, y, r);
+      g.fillStyle(0xffffff, 0.9).fillCircle(x + r * 0.35, y - r * 0.35, r * 0.32);
+    };
+    const arcEyes = (r: number): void => {
+      for (const p of [EYE_L, EYE_R]) {
+        const [x, y] = P(p);
+        g.beginPath();
+        g.arc(x, y + 1.5, r, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340));
+        g.strokePath();
+      }
+    };
+    switch (this.expr) {
+      case "happy":
+      case "chew":
+        arcEyes(3);
+        break;
+      case "shock":
+      case "panic": {
+        dot(EYE_L, this.expr === "shock" ? 3.6 : 2.8);
+        dot(EYE_R, this.expr === "shock" ? 3.6 : 2.8);
+        g.lineStyle(1.4, INK, 1);
+        const [bl, by] = P(EYE_L, 0, -6);
+        const [br] = P(EYE_R, 0, -6);
+        g.lineBetween(bl - 3, by - 1, bl + 3, by + 1);
+        g.lineBetween(br - 3, by + 1, br + 3, by - 1);
+        break;
+      }
+      case "dizzy":
+        for (const p of [EYE_L, EYE_R]) {
+          const [x, y] = P(p);
+          g.lineBetween(x - 2.5, y - 2.5, x + 2.5, y + 2.5);
+          g.lineBetween(x - 2.5, y + 2.5, x + 2.5, y - 2.5);
+        }
+        break;
+      case "full":
+        for (const p of [EYE_L, EYE_R]) {
+          const [x, y] = P(p);
+          g.lineBetween(x - 2.5, y, x + 2.5, y);
+        }
+        break;
+      default:
+        dot(EYE_L, 2.6);
+        dot(EYE_R, 2.6);
+    }
+  }
+
   private drawFace(): void {
     const g = this.face;
     g.clear();
@@ -135,6 +192,10 @@ export class CharacterArt extends Phaser.GameObjects.Container {
     };
     const [mx, my] = P(MOUTH);
     g.lineStyle(1.6, INK, 1);
+    if (this.masked) {
+      this.drawMaskedEyes(P);
+      return;
+    }
 
     switch (this.expr) {
       case "normal": {

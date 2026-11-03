@@ -1,11 +1,13 @@
 import type { Gender } from "./types";
 import { BACKDROP_CHOICES, type BackdropChoice } from "../config/theme";
+import { UNIFORMS, type Uniform } from "../objects/CharacterSprite";
 
 /** Small per-device preferences kept in localStorage (safe if unavailable). */
 
 const GENDER_KEY = "hk_gender";
 const TUTORIAL_KEY = "hk_tutorial_done";
 const BACKDROP_KEY = "hk_backdrop";
+const UNIFORM_KEY = "hk_uniform";
 
 function get(key: string): string | null {
   try {
@@ -47,4 +49,13 @@ export function getBackdropChoice(): BackdropChoice {
 
 export function saveBackdropChoice(c: BackdropChoice): void {
   set(BACKDROP_KEY, c);
+}
+
+export function getUniform(): Uniform {
+  const v = get(UNIFORM_KEY) as Uniform | null;
+  return v && UNIFORMS.includes(v) ? v : "umum";
+}
+
+export function saveUniform(u: Uniform): void {
+  set(UNIFORM_KEY, u);
 }

@@ -18,10 +18,13 @@ import {
 } from "../data/leaderboard";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
+import { openSharePreview } from "../ui/ShareCard";
+import type { BackdropVariant } from "../config/theme";
 import { addMuteToggle } from "../ui/MuteToggle";
 import { renderLeaderboard } from "../ui/LeaderboardPanel";
 import { CharacterArt } from "../objects/CharacterArt";
-import { PLAYER_BASES } from "../config/playerConfig";
+import { ensureCharacter } from "../objects/CharacterSprite";
+import { getUniform } from "../data/prefs";
 import type { GameUser } from "../data/types";
 import { Fx, FX_STAR } from "../ui/Fx";
 import { addPeriodTabs } from "../ui/PeriodTabs";
@@ -43,6 +46,7 @@ export class GameOverScene extends Phaser.Scene {
   private boardHeader!: Phaser.GameObjects.Text;
   private boardSub!: Phaser.GameObjects.Text;
   private boardReq = 0;
+  private personalBest = false;
 
   constructor() {
     super("GameOver");
@@ -67,6 +71,7 @@ export class GameOverScene extends Phaser.Scene {
 
     const starved = this.result.reason === "starve";
     const pb = recordPersonalBest(this.result.survivalSeconds);
+    this.personalBest = pb.isNew;
 
     const title = this.add
       .text(GAME_WIDTH / 2, 150, starved ? "KELAPARAN!" : "GAME OVER", {
@@ -82,7 +87,7 @@ export class GameOverScene extends Phaser.Scene {
     const fx = new Fx(this); // also creates the particle textures used below
     // The character shows how the run ended.
     const user = this.registry.get("user") as GameUser;
-    const hero = new CharacterArt(this, 96, 476, PLAYER_BASES[user.gender].key, 200);
+    const hero = new CharacterArt(this, 96, 476, ensureCharacter(this, user.gender, getUniform()), 200);
     hero.setExpression(starved ? "dizzy" : "full");
     hero.setAlpha(0);
     this.tweens.add({ targets: hero, alpha: 1, y: { from: 440, to: 476 }, duration: 420, ease: "Bounce.easeOut" });
@@ -426,8 +431,38 @@ export class GameOverScene extends Phaser.Scene {
     addPeriodTabs(this, GAME_WIDTH / 2, 572, period, (p) => this.renderPeriod(p));
     this.renderPeriod(period);
 
-    makeButton(this, 220, 1160, "MAIN LAGI", () => goTo(this, "Game", { retry: true }), { width: 300 });
-    makeButton(this, 530, 1160, "MENU", () => goTo(this, "Menu"), { width: 240, color: 0x37406b });
+    makeButton(this, 128, 1160, "BAGIKAN", () => this.openShare(), { width: 216, fontSize: 34, color: 0x25a35a });
+    makeButton(this, 366, 1160, "MAIN LAGI", () => goTo(this, "Game", { retry: true }), { width: 236, fontSize: 34 });
+    makeButton(this, 596, 1160, "MENU", () => goTo(this, "Menu"), { width: 196, fontSize: 34, color: 0x37406b });
+  }
+
+  /** Result card for WhatsApp / Story. */
+  private openShare(): void {
+    const user = this.registry.get("user") as GameUser;
+    const r = this.submitted;
+    let rank: { rank: number; label: string } | null = null;
+    // only show a placement when this run is the player's best (otherwise the
+    // rank belongs to an older score)
+    if (r?.ok && r.online && r.periods && r.improved) {
+      // prefer the most impressive placement: today, then this week, then all time
+      for (const p of ["all", "week", "day"] as Period[]) {
+        const k = r.periods[p]?.rank;
+        if (k && (!rank || k < rank.rank)) {
+          rank = { rank: k, label: PERIOD_LABEL[p].toLowerCase() === "semua" ? "sepanjang masa" : PERIOD_LABEL[p].toLowerCase() };
+        }
+      }
+      if (rank && rank.rank > 10) rank = null;
+    }
+    openSharePreview(this, {
+      seconds: this.result.survivalSeconds,
+      name: r?.ok ? this.name : "",
+      rank,
+      newRecord: r?.ok ? !!r.improved && r.previousBest !== null && r.previousBest !== undefined : this.personalBest,
+      variant: (this.registry.get("__bd_variant") as BackdropVariant | undefined) ?? "hospital",
+      gender: user.gender,
+      uniform: getUniform(),
+      caught: this.result.caught ?? {},
+    });
   }
 
   private renderPeriod(period: Period): void {
