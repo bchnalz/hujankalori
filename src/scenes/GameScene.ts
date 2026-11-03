@@ -3,7 +3,7 @@ import { addBackdrop } from "../ui/Backdrop";
 import { FONT_DISPLAY, FONT_UI } from "../config/theme";
 import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_HEIGHT, GAME_WIDTH, gameConfig } from "../config/gameConfig";
-import { PLAYER_BASES } from "../config/playerConfig";
+import { ensureCharacter } from "../objects/CharacterSprite";
 import type { GameUser } from "../data/types";
 import { Player } from "../objects/Player";
 import { Spawner } from "../systems/Spawner";
@@ -17,7 +17,7 @@ import type { ItemType } from "../config/itemConfig";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { endRun, startRun } from "../data/leaderboard";
-import { getBackdropChoice } from "../data/prefs";
+import { getBackdropChoice, getUniform } from "../data/prefs";
 import { runBriefing } from "../ui/Briefing";
 import { Fx } from "../ui/Fx";
 
@@ -104,7 +104,7 @@ export class GameScene extends Phaser.Scene {
     this.comboText = undefined;
 
     const user = this.registry.get("user") as GameUser;
-    const baseKey = PLAYER_BASES[user.gender].key;
+    const baseKey = ensureCharacter(this, user.gender, getUniform());
 
     addBackdrop(this, { horizon: gameConfig.footer.top, groundDepth: 1, dim: 0.25 });
 
@@ -649,6 +649,7 @@ export class GameScene extends Phaser.Scene {
       loc: (this.registry.get("__bd_variant") as string | undefined) ?? "hospital",
       ch: getBackdropChoice() === "auto" ? ("auto" as const) : ("pilih" as const),
       g: user?.gender ?? "male",
+      u: getUniform(),
       kin: this.kcalIn,
       kout: this.kcalOut,
       items: { ...this.caught },

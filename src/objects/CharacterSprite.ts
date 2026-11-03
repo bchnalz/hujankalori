@@ -1,3 +1,4 @@
+import Phaser from "phaser";
 import type { Gender } from "../data/types";
 
 /**
@@ -387,6 +388,29 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
       ctx.stroke();
     }
   } else if (u === "batik" || u === "korpri") {
+    if (u === "korpri") {
+      // gold Korpri pin on the left chest
+      const px = 76;
+      const py = torsoTop + 12;
+      ctx.fillStyle = "#f2c94c";
+      ctx.strokeStyle = "#8a6416";
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(px, py, 3.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#8a6416";
+      ctx.fillRect(px - 0.35, py - 0.5, 0.7, 2.6);
+      for (const [dx, dy, r] of [[0, -1.6, 0.9], [-1.1, -0.7, 0.7], [1.1, -0.7, 0.7]]) {
+        ctx.beginPath();
+        ctx.arc(px + dx, py + dy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.beginPath();
+      ctx.arc(px - 1.4, py - 1.6, 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
     // collar band + buttons
     rr(ctx, 54, torsoTop - 1, 20, 5, 2);
     fillStroke(ctx, u === "batik" ? "#5c1a20" : "#1b3f80", 1.2);
@@ -502,4 +526,88 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
   }
 
   ctx.restore();
+}
+
+/** Uniforms that cover the mouth (the face overlay draws eyes only). */
+export function isMasked(u: Uniform): boolean {
+  return u === "ok";
+}
+
+export function characterKey(gender: Gender, uniform: Uniform): string {
+  return `player_${gender}_${uniform}`;
+}
+
+/** Build (once) the spritesheet + idle animation for this look; returns the texture key. */
+export function ensureCharacter(scene: Phaser.Scene, gender: Gender, uniform: Uniform): string {
+  const key = characterKey(gender, uniform);
+  if (!scene.textures.exists(key)) {
+    const S = SPRITE_UNIT * RES;
+    const sheet = drawCharacterSheet(gender, uniform);
+    const tex = scene.textures.addCanvas(`${key}__src`, sheet)!;
+    scene.textures.addSpriteSheet(key, tex.getSourceImage() as HTMLImageElement, { frameWidth: S, frameHeight: S });
+  }
+  const idle = `${key}_idle`;
+  if (!scene.anims.exists(idle)) {
+    scene.anims.create({
+      key: idle,
+      frames: scene.anims.generateFrameNumbers(key, { start: 0, end: FRAMES - 1 }),
+      frameRate: 5,
+      repeat: -1,
+    });
+  }
+  return key;
+}
+
+/**
+ * Character as a single still image with a face (for the share card):
+ * frame 0, `size` px square, transparent background.
+ */
+export function drawCharacterPortrait(gender: Gender, uniform: Uniform, size: number, happy: boolean): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const x = c.getContext("2d")!;
+  const S = SPRITE_UNIT * RES;
+  x.drawImage(drawCharacterSheet(gender, uniform), 0, 0, S, S, 0, 0, size, size);
+  const k = size / SPRITE_UNIT;
+  const P = (px: number, py: number): [number, number] => [px * k, py * k];
+  x.strokeStyle = INK;
+  x.fillStyle = INK;
+  x.lineCap = "round";
+  x.lineWidth = 1.6 * k;
+  for (const ex of [56, 72]) {
+    const [a, b] = P(ex, happy ? 43.5 : 42);
+    x.beginPath();
+    if (happy) {
+      x.arc(a, b, 3 * k, Math.PI * 1.1, Math.PI * 1.9);
+      x.stroke();
+    } else {
+      x.arc(a, b, 2.6 * k, 0, Math.PI * 2);
+      x.fill();
+    }
+  }
+  if (!isMasked(uniform)) {
+    x.fillStyle = "rgba(255,138,149,0.55)";
+    for (const ex of [52, 76]) {
+      const [a, b] = P(ex, 48);
+      x.beginPath();
+      x.ellipse(a, b, 3 * k, 1.8 * k, 0, 0, Math.PI * 2);
+      x.fill();
+    }
+    const [mx, my] = P(64, 48.5);
+    x.fillStyle = INK;
+    x.beginPath();
+    if (happy) {
+      x.arc(mx, my, 5 * k, 0, Math.PI);
+      x.fill();
+      x.fillStyle = "#ff6f7d";
+      x.beginPath();
+      x.ellipse(mx, my + 1.6 * k, 2.2 * k, 1.1 * k, 0, 0, Math.PI * 2);
+      x.fill();
+    } else {
+      x.arc(mx, my - 2 * k, 4 * k, 0.44, 2.7);
+      x.stroke();
+    }
+  }
+  return c;
 }

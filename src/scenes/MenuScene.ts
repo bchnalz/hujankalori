@@ -5,9 +5,11 @@ import { openLocationPicker } from "../ui/LocationPicker";
 import { fadeInScene, goTo } from "../ui/transition";
 import { GAME_WIDTH } from "../config/gameConfig";
 import { UI } from "../config/assetManifest";
-import { PLAYER_BASES } from "../config/playerConfig";
+import { CharacterArt } from "../objects/CharacterArt";
+import { ensureCharacter, UNIFORM_LABEL } from "../objects/CharacterSprite";
+import { openUniformPicker } from "../ui/UniformPicker";
 import type { GameUser, Gender } from "../data/types";
-import { getBackdropChoice, isTutorialDone, saveBackdropChoice, saveGender } from "../data/prefs";
+import { getBackdropChoice, getUniform, isTutorialDone, saveBackdropChoice, saveGender, saveUniform } from "../data/prefs";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
 import { addFullscreenToggle } from "../ui/FullscreenToggle";
@@ -20,7 +22,7 @@ const CARD_H = 250;
 const CARD_Y = 640;
 
 export class MenuScene extends Phaser.Scene {
-  private cards: Partial<Record<Gender, { box: Phaser.GameObjects.Graphics; sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; x: number }>> = {};
+  private cards: Partial<Record<Gender, { box: Phaser.GameObjects.Graphics; art: CharacterArt; label: Phaser.GameObjects.Text; x: number }>> = {};
 
   constructor() {
     super("Menu");
@@ -69,15 +71,20 @@ export class MenuScene extends Phaser.Scene {
     this.makeCard("female", GAME_WIDTH / 2 + 135, "Perempuan");
     this.select(user.gender, false);
 
-    this.add
-      .text(GAME_WIDTH / 2, 806, "Tangkap olahraga, hindari kalori berlebih.", {
-        fontFamily: FONT_UI,
-        fontSize: "24px",
-        color: "#c9d4ec",
-        stroke: "#070b18",
-        strokeThickness: 6,
-      })
-      .setOrigin(0.5);
+    makeButton(
+      this,
+      GAME_WIDTH / 2,
+      814,
+      `SERAGAM: ${UNIFORM_LABEL[getUniform()].toUpperCase()}`,
+      () =>
+        openUniformPicker(this, (u) => {
+          if (u === getUniform()) return;
+          saveUniform(u);
+          this.cameras.main.fadeOut(180, 0, 0, 0);
+          this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart());
+        }),
+      { width: 470, height: 66, fontSize: 28, color: 0x7a4fb8 },
+    );
 
     makeButton(this, GAME_WIDTH / 2, 940, "MAIN", () => {
       goTo(this, isTutorialDone() ? "Game" : "Tutorial", { firstTime: true });
@@ -129,10 +136,7 @@ export class MenuScene extends Phaser.Scene {
 
   private makeCard(gender: Gender, x: number, label: string): void {
     const box = this.add.graphics();
-    const base = PLAYER_BASES[gender];
-    const sprite = this.add.sprite(x, CARD_Y - 18, base.key, 0).setDisplaySize(170, 170);
-    const idle = `${base.key}_idle`;
-    if (this.anims.exists(idle)) sprite.play(idle);
+    const art = new CharacterArt(this, x, CARD_Y + 66, ensureCharacter(this, gender, getUniform()), 176);
     const text = this.add
       .text(x, CARD_Y + CARD_H / 2 - 32, label, {
         fontFamily: FONT_UI,
@@ -145,7 +149,7 @@ export class MenuScene extends Phaser.Scene {
     const hit = this.add.zone(x, CARD_Y, CARD_W, CARD_H).setInteractive({ useHandCursor: true });
     hit.on("pointerup", () => this.select(gender, true));
 
-    this.cards[gender] = { box, sprite, label: text, x };
+    this.cards[gender] = { box, art, label: text, x };
   }
 
   private select(gender: Gender, byUser: boolean): void {
@@ -166,20 +170,10 @@ export class MenuScene extends Phaser.Scene {
       c.box.fillRoundedRect(c.x - CARD_W / 2, CARD_Y - CARD_H / 2, CARD_W, CARD_H, 22);
       c.box.lineStyle(on ? 6 : 3, on ? 0x7cfc8a : 0x2a3450, 1);
       c.box.strokeRoundedRect(c.x - CARD_W / 2, CARD_Y - CARD_H / 2, CARD_W, CARD_H, 22);
-      c.sprite.setAlpha(on ? 1 : 0.45);
+      c.art.setAlpha(on ? 1 : 0.45);
+      c.art.setExpression(on ? "happy" : "normal");
       c.label.setColor(on ? "#7CFC8A" : "#9fb0d0");
-      if (on) {
-        if (c.sprite.anims.currentAnim) c.sprite.anims.resume();
-        if (byUser) {
-          this.tweens.killTweensOf(c.sprite);
-          c.sprite.setDisplaySize(170, 170);
-          const sx = c.sprite.scaleX;
-          const sy = c.sprite.scaleY;
-          this.tweens.add({ targets: c.sprite, scaleX: sx * 1.15, scaleY: sy * 1.15, duration: 120, yoyo: true });
-        }
-      } else if (c.sprite.anims.currentAnim) {
-        c.sprite.anims.pause();
-      }
+      if (on && byUser) c.art.squash(0.16);
     }
   }
 }

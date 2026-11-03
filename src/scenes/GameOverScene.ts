@@ -21,7 +21,8 @@ import { makeButton } from "../ui/Button";
 import { addMuteToggle } from "../ui/MuteToggle";
 import { renderLeaderboard } from "../ui/LeaderboardPanel";
 import { CharacterArt } from "../objects/CharacterArt";
-import { PLAYER_BASES } from "../config/playerConfig";
+import { ensureCharacter } from "../objects/CharacterSprite";
+import { getUniform } from "../data/prefs";
 import type { GameUser } from "../data/types";
 import { Fx, FX_STAR } from "../ui/Fx";
 import { addPeriodTabs } from "../ui/PeriodTabs";
@@ -82,7 +83,7 @@ export class GameOverScene extends Phaser.Scene {
     const fx = new Fx(this); // also creates the particle textures used below
     // The character shows how the run ended.
     const user = this.registry.get("user") as GameUser;
-    const hero = new CharacterArt(this, 96, 476, PLAYER_BASES[user.gender].key, 200);
+    const hero = new CharacterArt(this, 96, 476, ensureCharacter(this, user.gender, getUniform()), 200);
     hero.setExpression(starved ? "dizzy" : "full");
     hero.setAlpha(0);
     this.tweens.add({ targets: hero, alpha: 1, y: { from: 440, to: 476 }, duration: 420, ease: "Bounce.easeOut" });
