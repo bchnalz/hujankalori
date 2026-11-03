@@ -55,7 +55,8 @@
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
       th { color: var(--dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
-      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      td:first-child { white-space: nowrap; }
       td.name { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; letter-spacing: 1px; }
       td.actions { text-align: right; white-space: nowrap; }
       td.actions .btn + .btn { margin-left: 6px; }
@@ -83,24 +84,44 @@
       .chipbtn { border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 999px; font-weight: 600; cursor: pointer; font-size: 13px; }
       .chipbtn.on { background: var(--green); border-color: var(--green); color: #fff; }
       .hbars { display: grid; gap: 8px; }
-      .hbar { display: grid; grid-template-columns: 150px 1fr 70px; gap: 10px; align-items: center; font-size: 14px; }
+      .hbar { display: grid; grid-template-columns: 210px 1fr 70px; gap: 10px; align-items: center; font-size: 14px; }
       .hbar .lbl { display: flex; align-items: center; gap: 8px; min-width: 0; }
       .hbar .lbl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .hbar img { width: 28px; height: 28px; object-fit: contain; flex: none; }
       .hbar .tr { height: 14px; background: var(--bg); border-radius: 999px; overflow: hidden; }
       .hbar .tr i { display: block; height: 100%; border-radius: 999px; background: var(--green); }
-      .hbar .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+      .hbar .v { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
       .hbar .v b { color: var(--text); }
       .t-food i { background: #ff6a45 !important; } .t-healthy i { background: #ffc22e !important; } .t-activity i { background: #2bd65f !important; }
       .sub { font-size: 13px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; }
       .exports { display: flex; flex-wrap: wrap; gap: 8px; }
-      @media (max-width: 720px) { .hbar { grid-template-columns: 110px 1fr 56px; } }
+      @media (max-width: 720px) { .hbar { grid-template-columns: 140px 1fr 74px; gap: 8px; font-size: 13px; } .hbar .v { font-size: 12px; } header { flex-wrap: wrap; } }
+      .nav { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; margin: -6px 0 14px; background: linear-gradient(var(--bg) 80%, transparent); scrollbar-width: none; }
+      .nav a { flex: none; text-decoration: none; color: var(--muted); font-weight: 700; font-size: 14px; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
+      .nav a.on, .nav a:hover { color: #fff; border-color: var(--green); background: rgba(76,175,80,.18); }
+      section.block { scroll-margin-top: 64px; }
+      .card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+      .card-head h2 { margin: 0; margin-right: auto; }
+      .card-head .hint { color: var(--dim); font-size: 13px; }
+      .stats.s8 { grid-template-columns: repeat(4, 1fr); }
+      .stat small { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
+      .pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--dim); }
+      .pager .pg { display: flex; gap: 4px; flex-wrap: wrap; }
+      .pager button { min-width: 34px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); font-weight: 700; cursor: pointer; padding: 0 8px; }
+      .pager button.on { background: var(--green); border-color: var(--green); color: #fff; }
+      .pager button:disabled { opacity: .35; cursor: default; }
+      .pager select { background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; }
+      tbody tr:hover td { background: rgba(255,255,255,.02); }
+      td.rank b { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-size: 12px; background: var(--panel-2); color: var(--muted); }
+      td.rank b.g1 { background: #ffd54f; color: #3a2a00; } td.rank b.g2 { background: #cfd8e6; color: #1d2433; } td.rank b.g3 { background: #e0a46b; color: #3a1e00; }
       .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; }
       .toast.show { opacity: 1; }
       @media (max-width: 720px) {
         .stats { grid-template-columns: repeat(2, 1fr); }
         .grid2 { grid-template-columns: 1fr; }
         th.hide-sm, td.hide-sm { display: none; }
+        .stats.s8 { grid-template-columns: repeat(2, 1fr); }
+        .pager { justify-content: center; }
       }
     </style>
   </head>
@@ -126,21 +147,33 @@
             <button id="logout" class="btn ghost sm">Keluar</button>
           </div>
         </header>
+        <nav class="nav" id="nav">
+          <a href="#ringkasan" class="on">Ringkasan</a>
+          <a href="#insights">Analisis</a>
+          <a href="#peringkat">Peringkat</a>
+          <a href="#kiriman">Kiriman</a>
+          <a href="#blokir">Blokir</a>
+        </nav>
 
-        <div class="card">
-          <h2>Statistik permainan</h2>
-          <div class="stats" style="margin-bottom:14px">
+        <section class="card block" id="ringkasan">
+          <div class="card-head"><h2>Ringkasan</h2><span class="hint" id="updated"></span></div>
+          <div class="stats s8" style="margin-bottom:14px">
             <div class="stat"><b id="pAll">–</b><span>Total permainan</span></div>
             <div class="stat"><b id="pToday">–</b><span>Permainan hari ini</span></div>
             <div class="stat"><b id="pDev">–</b><span>Perangkat unik</span></div>
             <div class="stat"><b id="pAvg">–</b><span>Rata-rata main per perangkat</span></div>
+            <div class="stat"><b id="sDay">–</b><span>Pemain di peringkat hari ini</span></div>
+            <div class="stat"><b id="sWeek">–</b><span>Pemain minggu ini</span></div>
+            <div class="stat"><b id="sAll">–</b><span>Pemain sepanjang masa</span></div>
+            <div class="stat"><b id="sBan">–</b><span>Inisial diblokir</span></div>
           </div>
+          <p class="sub">Permainan per hari · 14 hari terakhir</p>
           <div id="chart" class="chart" role="img" aria-label="Jumlah permainan per hari, 14 hari terakhir"></div>
           <p class="dim" id="statsNote" style="margin-bottom:0"></p>
-        </div>
+        </section>
 
-        <div class="card" id="insights">
-          <h2>Analisis permainan</h2>
+        <section class="card block" id="insights">
+          <div class="card-head"><h2>Analisis permainan</h2></div>
           <div class="filter">
             <button class="chipbtn" data-r="7">7 hari</button>
             <button class="chipbtn on" data-r="30">30 hari</button>
@@ -174,6 +207,7 @@
           <div id="iDur" class="chart" role="img" aria-label="Rata-rata lama bermain per hari"></div>
           <p class="sub" style="margin-top:18px">Item yang paling sering ditangkap</p>
           <div id="iItems" class="hbars"></div>
+          <div class="pager" id="itemsPager"></div>
           <div class="toolbar" style="margin:18px 0 0">
             <h2 style="margin:0;margin-right:auto;font-size:15px">Ekspor data (Excel / CSV)</h2>
             <div class="exports">
@@ -182,16 +216,9 @@
             </div>
           </div>
           <p class="dim" id="iNote" style="margin-bottom:0"></p>
-        </div>
+        </section>
 
-        <div class="stats">
-          <div class="stat"><b id="sDay">–</b><span>Pemain hari ini</span></div>
-          <div class="stat"><b id="sWeek">–</b><span>Pemain minggu ini</span></div>
-          <div class="stat"><b id="sAll">–</b><span>Pemain sepanjang masa</span></div>
-          <div class="stat"><b id="sBan">–</b><span>Inisial diblokir</span></div>
-        </div>
-
-        <div class="card">
+        <section class="card block" id="peringkat">
           <div class="toolbar">
             <h2 style="margin:0;margin-right:auto">Papan peringkat</h2>
             <div class="tabs" id="tabs">
@@ -203,16 +230,16 @@
           </div>
           <div class="scroll">
             <table>
-              <thead><tr><th class="num">#</th><th>Inisial</th><th class="num">Skor</th><th></th></tr></thead>
+              <thead><tr><th class="num" style="width:56px">#</th><th>Inisial</th><th class="num">Skor</th><th></th></tr></thead>
               <tbody id="board"></tbody>
             </table>
           </div>
-          <p class="dim" id="boardNote"></p>
-        </div>
+          <div class="pager" id="boardPager"></div>
+          <p class="dim" id="boardNote" style="margin-bottom:0"></p>
+        </section>
 
-        <div class="grid2">
-          <div class="card">
-            <h2>Kiriman terbaru</h2>
+          <section class="card block" id="kiriman">
+            <div class="card-head"><h2>Kiriman terbaru</h2></div>
             <p class="dim" style="margin-top:-6px">Sesi = waktu nyata sejak "MULAI!" sampai skor dikirim. Pemain asli butuh beberapa detik untuk mengetik inisial, jadi skor yang hampir sama dengan durasi sesi ditandai <b>cek</b>. IP bisa sama untuk banyak pemain di satu Wi-Fi kantor.</p>
             <div class="scroll">
               <table>
@@ -220,8 +247,9 @@
                 <tbody id="log"></tbody>
               </table>
             </div>
-          </div>
-          <div class="card">
+            <div class="pager" id="logPager"></div>
+          </section>
+          <section class="card block" id="blokir">
             <h2>Inisial diblokir</h2>
             <p class="dim" style="margin-top:-6px">Inisial ini tidak bisa mengirim skor dan dihapus dari semua papan.</p>
             <div id="banned" class="chips"></div>
@@ -229,8 +257,7 @@
               <input id="banName" type="text" maxlength="4" placeholder="ABCD" />
               <button class="btn danger sm" type="submit">Blokir</button>
             </form>
-          </div>
-        </div>
+          </section>
       </section>
     </div>
     <div id="toast" class="toast"></div>
@@ -301,6 +328,7 @@
           const b = ev.target.closest("button[data-p]");
           if (!b) return;
           period = b.dataset.p;
+          if (pages.board) pages.board.page = 1;
           [...$("tabs").children].forEach((x) => x.classList.toggle("on", x === b));
           load();
         });
@@ -316,7 +344,7 @@
         async function load() {
           try {
             const q = $("search").value;
-            const d = await call("GET", null, `?period=${period}&limit=200${q ? "&q=" + q : ""}`);
+            const d = await call("GET", null, `?period=${period}&limit=500${q ? "&q=" + q : ""}`);
             render(d);
             if (!load._insights) { load._insights = true; loadInsights(); }
           } catch (e) {
@@ -358,29 +386,23 @@
           $("sAll").textContent = fmt(d.summary.all);
           $("sBan").textContent = fmt(d.summary.banned);
 
-          const board = $("board");
-          board.innerHTML = "";
-          if (!d.entries.length) {
-            board.innerHTML = `<tr><td colspan="4" class="empty">Belum ada skor.</td></tr>`;
-          }
-          for (const e of d.entries) {
+          const medal = (r) => `<b class="${r <= 3 ? "g" + r : ""}">${r}</b>`;
+          if ($("search").value !== (render._q || "")) { render._q = $("search").value; if (pages.board) pages.board.page = 1; }
+          paginate("board", d.entries, $("board"), $("boardPager"), (e) => {
             const tr = document.createElement("tr");
-            tr.innerHTML = `<td class="num">${e.rank}</td><td class="name">${e.name}</td><td class="num">${e.score.toFixed(1)} dtk</td>
+            tr.innerHTML = `<td class="num rank">${medal(e.rank)}</td><td class="name">${e.name}</td><td class="num">${e.score.toFixed(1)} dtk</td>
               <td class="actions"><button class="btn sm" data-a="del">Hapus</button><button class="btn danger sm" data-a="ban">Blokir</button></td>`;
             tr.querySelector('[data-a="del"]').onclick = () => del(e.name);
             tr.querySelector('[data-a="ban"]').onclick = () => ban(e.name);
-            board.appendChild(tr);
-          }
+            return tr;
+          }, { sizes: [20, 50, 100], empty: `<tr><td colspan="4" class="empty">Belum ada skor.</td></tr>` });
           const q = $("search").value;
           $("boardNote").textContent = q
             ? `${fmt(d.entries.length)} hasil untuk "${q}".`
-            : d.entries.length < d.total ? `Menampilkan ${fmt(d.entries.length)} teratas dari ${fmt(d.total)}. Gunakan pencarian untuk inisial lain.` : "";
+            : d.entries.length < d.total ? `Memuat ${fmt(d.entries.length)} teratas dari ${fmt(d.total)}. Gunakan pencarian untuk inisial lain.` : "";
 
           // log: flag runs whose score is almost the whole session (no time spent typing initials)
-          const log = $("log");
-          log.innerHTML = "";
-          if (!d.log.length) log.innerHTML = `<tr><td colspan="6" class="empty">Belum ada kiriman.</td></tr>`;
-          for (const l of d.log.slice(0, 60)) {
+          paginate("log", d.log, $("log"), $("logPager"), (l) => {
             const suspect = Number(l.s) > Number(l.r) - 1.5;
             const tr = document.createElement("tr");
             if (suspect) tr.className = "flag";
@@ -388,8 +410,9 @@
               <td class="num">${Number(l.s).toFixed(1)}</td><td class="num hide-sm">${Number(l.r).toFixed(1)}</td>
               <td class="hide-sm dim">${l.ip}</td><td class="actions"><button class="btn danger sm">Blokir</button></td>`;
             tr.querySelector("button").onclick = () => ban(l.n);
-            log.appendChild(tr);
-          }
+            return tr;
+          }, { sizes: [15, 30, 60], empty: `<tr><td colspan="6" class="empty">Belum ada kiriman.</td></tr>` });
+          $("updated").textContent = "Diperbarui " + new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }) + " WIB";
 
           const banned = $("banned");
           banned.innerHTML = d.banned.length ? "" : `<span class="empty">Belum ada.</span>`;
@@ -428,6 +451,54 @@
           $("banName").value = "";
           ban(n);
         });
+
+        // ---------------------------------------------------------- pagination
+        /**
+         * Paginate `rows` into `body` (a tbody or div) with a pager in `pagerEl`.
+         * Keeps the current page per pager while the data refreshes.
+         */
+        const pages = {};
+        function paginate(id, rows, body, pagerEl, renderRow, opts = {}) {
+          const sizes = opts.sizes || [10, 20, 50];
+          const st = pages[id] || (pages[id] = { page: 1, size: opts.size || sizes[0] });
+          const total = rows.length;
+          const nPages = Math.max(1, Math.ceil(total / st.size));
+          st.page = Math.min(st.page, nPages);
+          body.innerHTML = "";
+          if (!total) {
+            body.innerHTML = opts.empty || "";
+            pagerEl.innerHTML = "";
+            return;
+          }
+          const from = (st.page - 1) * st.size;
+          rows.slice(from, from + st.size).forEach((r, i) => body.appendChild(renderRow(r, from + i)));
+          if (total <= sizes[0]) { pagerEl.innerHTML = `<span>${fmt(total)} baris</span>`; return; }
+          // compact page list: 1 … p-1 p p+1 … n
+          const list = [];
+          for (let p = 1; p <= nPages; p++) {
+            if (p === 1 || p === nPages || Math.abs(p - st.page) <= 1) list.push(p);
+            else if (list[list.length - 1] !== "…") list.push("…");
+          }
+          pagerEl.innerHTML = `<span>Menampilkan ${fmt(from + 1)}–${fmt(Math.min(total, from + st.size))} dari ${fmt(total)}</span>
+            <div class="pg"><button data-p="prev" ${st.page === 1 ? "disabled" : ""} aria-label="Sebelumnya">‹</button>${list
+              .map((p) => (p === "…" ? `<button disabled>…</button>` : `<button data-p="${p}" class="${p === st.page ? "on" : ""}">${p}</button>`))
+              .join("")}<button data-p="next" ${st.page === nPages ? "disabled" : ""} aria-label="Berikutnya">›</button></div>
+            <label>Per halaman <select>${sizes.map((n) => `<option ${n === st.size ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
+          const rerender = () => paginate(id, rows, body, pagerEl, renderRow, opts);
+          pagerEl.querySelectorAll("button[data-p]").forEach((b) => (b.onclick = () => {
+            const v = b.dataset.p;
+            st.page = v === "prev" ? st.page - 1 : v === "next" ? st.page + 1 : Number(v);
+            rerender();
+          }));
+          pagerEl.querySelector("select").onchange = (ev) => { st.size = Number(ev.target.value); st.page = 1; rerender(); };
+        }
+
+        // nav highlight
+        const navLinks = [...document.querySelectorAll("#nav a")];
+        const spy = new IntersectionObserver((es) => es.forEach((e) => {
+          if (e.isIntersecting) navLinks.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id));
+        }), { rootMargin: "-40% 0px -55% 0px" });
+        document.querySelectorAll("section.block").forEach((el) => spy.observe(el));
 
         // ------------------------------------------------------------ insights
         const ITEMS = {
@@ -492,10 +563,18 @@
           $("iCh").textContent = auto + pick ? `Otomatis sesuai jam: ${fmt(auto)} · Dipilih sendiri: ${fmt(pick)}` : "";
           hbars($("iWhy"), obj(d.why, WHY));
           hbars($("iG"), obj(d.g, GEN));
-          hbars($("iItems"), (d.items || []).slice(0, 19).map((it) => {
+          const itemRows = (d.items || []).map((it) => {
             const [type, ...rest] = it.key.split("_");
             return { label: ITEMS[it.key] || it.key, v: it.count, img: `/assets/items/${type}/${rest.join("_")}.png`, cls: "t-" + type };
-          }), { noPct: true });
+          });
+          const itemMax = Math.max(1, ...itemRows.map((r) => r.v));
+          paginate("items", itemRows, $("iItems"), $("itemsPager"), (r, i) => {
+            const el = document.createElement("div");
+            el.className = "hbar " + r.cls;
+            el.innerHTML = `<div class="lbl"><span class="dim" style="width:22px;flex:none;text-align:right">${i + 1}</span><img src="${r.img}" alt=""><span>${esc(r.label)}</span></div>`
+              + `<div class="tr"><i style="width:${(r.v / itemMax) * 100}%"></i></div><div class="v"><b>${fmt(r.v)}</b>×</div>`;
+            return el;
+          }, { sizes: [10, 20], empty: `<div class="empty">Belum ada data pada rentang ini.</div>` });
           // average play time per day
           const s = d.series || [];
           const el = $("iDur");
