@@ -9,14 +9,15 @@ import type { Gender } from "../data/types";
  * drawn at `RES`× for crisp edges on high-DPI phones.
  */
 
-export type Uniform = "umum" | "dokter" | "ok" | "penunjang" | "batik";
-export const UNIFORMS: Uniform[] = ["umum", "dokter", "ok", "penunjang", "batik"];
+export type Uniform = "umum" | "dokter" | "ok" | "penunjang" | "batik" | "korpri";
+export const UNIFORMS: Uniform[] = ["umum", "dokter", "ok", "penunjang", "batik", "korpri"];
 export const UNIFORM_LABEL: Record<Uniform, string> = {
   umum: "Bagian Umum",
   dokter: "Dokter",
   ok: "Perawat OK",
   penunjang: "Penunjang",
   batik: "Batik",
+  korpri: "Korpri",
 };
 
 export const SPRITE_UNIT = 128;
@@ -41,8 +42,9 @@ const LOOKS: Record<Uniform, Look> = {
   umum: { top: "#dcc196", topShade: "#c4a676", bottom: "#5b3e2b", bottomShade: "#47301f", collar: "#cfb283" },
   dokter: { top: "#f7f9fc", topShade: "#d9e0ea", bottom: "#7d838d", bottomShade: "#646a73" },
   ok: { top: "#3a9c7c", topShade: "#2d7f64", bottom: "#3a9c7c", bottomShade: "#2d7f64" },
-  penunjang: { top: "#24335f", topShade: "#1a2549", bottom: "#1f2c54", bottomShade: "#151e3d", collar: "#2f4078" },
-  batik: { top: "#8a4b22", topShade: "#713b19", bottom: "#1f1f24", bottomShade: "#141418" },
+  penunjang: { top: "#2e4793", topShade: "#233873", bottom: "#2a4189", bottomShade: "#1f3268", collar: "#3a58ad" },
+  batik: { top: "#17171c", topShade: "#0f0f13", bottom: "#1f1f24", bottomShade: "#141418" },
+  korpri: { top: "#2a64bd", topShade: "#1f4f99", bottom: "#23283a", bottomShade: "#181c2a" },
 };
 
 /** Canvas with all idle frames side by side (FRAMES × 128·RES wide). */
@@ -82,37 +84,95 @@ function vgrad(ctx: CanvasRenderingContext2D, y0: number, y1: number, a: string,
   return g;
 }
 
-function batikPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
-  // kawung motif: four petals around a dot, on a brown ground
+function tile(ctx: CanvasRenderingContext2D, size: number, draw: (g: CanvasRenderingContext2D) => void): CanvasPattern {
   const t = document.createElement("canvas");
-  const P = 12 * RES;
-  t.width = P;
-  t.height = P;
+  t.width = size * RES;
+  t.height = size * RES;
   const g = t.getContext("2d")!;
   g.scale(RES, RES);
-  g.fillStyle = "#8a4b22";
-  g.fillRect(0, 0, 12, 12);
-  g.fillStyle = "#e3b45a";
-  for (const [cx, cy] of [
-    [6, 6],
-    [0, 0],
-    [12, 0],
-    [0, 12],
-    [12, 12],
-  ]) {
-    for (const a of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
-      g.beginPath();
-      g.ellipse(cx + Math.cos(a + Math.PI / 4) * 2.6, cy + Math.sin(a + Math.PI / 4) * 2.6, 2.4, 1.3, a + Math.PI / 4, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
-  g.fillStyle = "#3a1d0c";
-  g.beginPath();
-  g.arc(6, 6, 0.9, 0, Math.PI * 2);
-  g.fill();
+  draw(g);
   const pat = ctx.createPattern(t, "repeat")!;
   pat.setTransform(new DOMMatrix().scale(1 / RES));
   return pat;
+}
+
+/** Batik: black ground with white corona-virus motifs outlined in maroon. */
+function batikPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
+  return tile(ctx, 22, (g) => {
+    g.fillStyle = "#141418";
+    g.fillRect(0, 0, 22, 22);
+    const virus = (cx: number, cy: number, r: number): void => {
+      g.strokeStyle = "#8a1f2a";
+      g.lineWidth = 0.7;
+      g.fillStyle = "#f3f1ec";
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + 0.2;
+        g.beginPath();
+        g.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+        g.lineTo(cx + Math.cos(a) * (r + r * 0.45), cy + Math.sin(a) * (r + r * 0.45));
+        g.strokeStyle = "#f3f1ec";
+        g.lineWidth = r * 0.22;
+        g.stroke();
+        g.beginPath();
+        g.arc(cx + Math.cos(a) * r * 1.55, cy + Math.sin(a) * r * 1.55, r * 0.26, 0, Math.PI * 2);
+        g.strokeStyle = "#8a1f2a";
+        g.lineWidth = 0.6;
+        g.fill();
+        g.stroke();
+      }
+      g.beginPath();
+      g.arc(cx, cy, r, 0, Math.PI * 2);
+      g.fill();
+      g.lineWidth = 0.8;
+      g.stroke();
+      g.fillStyle = "#8a1f2a";
+      for (const [dx, dy] of [[-0.45, -0.3], [0.4, 0.15], [-0.1, 0.5]]) {
+        g.beginPath();
+        g.arc(cx + dx * r, cy + dy * r, r * 0.16, 0, Math.PI * 2);
+        g.fill();
+      }
+    };
+    virus(6, 6, 3.4);
+    virus(17, 17, 3.4);
+    virus(17, 5, 1.6);
+    virus(5, 17, 1.6);
+  });
+}
+
+/** Korpri batik: blue ground with a light tree-and-wing motif. */
+function korpriPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
+  return tile(ctx, 16, (g) => {
+    g.fillStyle = "#2a64bd";
+    g.fillRect(0, 0, 16, 16);
+    const tree = (cx: number, cy: number): void => {
+      g.fillStyle = "#e8f1ff";
+      g.fillRect(cx - 0.4, cy - 1, 0.8, 3.2);
+      for (const [dx, dy, r] of [[0, -2.4, 1.3], [-1.4, -1.2, 1], [1.4, -1.2, 1]]) {
+        g.beginPath();
+        g.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+        g.fill();
+      }
+      // wings
+      g.strokeStyle = "#a9c8f3";
+      g.lineWidth = 0.6;
+      for (const sgn of [-1, 1]) {
+        for (let k = 0; k < 3; k++) {
+          g.beginPath();
+          g.moveTo(cx + sgn * 1.6, cy + 0.6 + k * 0.8);
+          g.lineTo(cx + sgn * (3.4 - k * 0.5), cy - 0.4 + k * 0.9);
+          g.stroke();
+        }
+      }
+    };
+    tree(4, 5);
+    tree(12, 13);
+    g.fillStyle = "#9fc0ee";
+    for (const [x, y] of [[12, 4], [4, 12], [8, 8]]) {
+      g.beginPath();
+      g.arc(x, y, 0.6, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
 }
 
 function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f: number): void {
@@ -168,11 +228,16 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
     ctx.translate(x + 6, torsoTop + 4);
     ctx.rotate((swing * dir * 2 * Math.PI) / 180);
     rr(ctx, -6, -2, 12, 34, 6);
-    fillStroke(ctx, vgrad(ctx, 0, 34, L.top, L.topShade));
+    fillStroke(ctx, u === "batik" ? batikPattern(ctx) : u === "korpri" ? korpriPattern(ctx) : vgrad(ctx, 0, 34, L.top, L.topShade));
     // short-sleeve scrubs show the forearm
     if (ok || u === "penunjang") {
       rr(ctx, -5, 18, 10, 14, 5);
       fillStroke(ctx, SKIN, 1.2);
+    }
+    if (u === "penunjang") {
+      // red piping at the sleeve end
+      ctx.fillStyle = "#d8262e";
+      ctx.fillRect(-6, 15.2, 12, 2.6);
     }
     ctx.beginPath();
     ctx.arc(0, 35, 6.2, 0, Math.PI * 2);
@@ -182,7 +247,7 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
 
   // ---- torso
   rr(ctx, 38, torsoTop, 52, 42, 12);
-  const torsoFill = u === "batik" ? batikPattern(ctx) : vgrad(ctx, torsoTop, torsoTop + 42, L.top, L.topShade);
+  const torsoFill = u === "batik" ? batikPattern(ctx) : u === "korpri" ? korpriPattern(ctx) : vgrad(ctx, torsoTop, torsoTop + 42, L.top, L.topShade);
   fillStroke(ctx, torsoFill, 1.8);
   // side shading
   ctx.save();
@@ -321,21 +386,11 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
       ctx.fill();
       ctx.stroke();
     }
-    ctx.strokeStyle = "rgba(255,255,255,0.35)";
-    ctx.beginPath();
-    ctx.moveTo(64, torsoTop + 3);
-    ctx.lineTo(64, torsoTop + 16);
-    ctx.stroke();
-    // small logo patch
-    ctx.fillStyle = "#e3e8f5";
-    ctx.beginPath();
-    ctx.arc(75, torsoTop + 14, 2.4, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (u === "batik") {
-    // collar band
+  } else if (u === "batik" || u === "korpri") {
+    // collar band + buttons
     rr(ctx, 54, torsoTop - 1, 20, 5, 2);
-    fillStroke(ctx, "#5e2f12", 1.2);
-    ctx.fillStyle = "#e3b45a";
+    fillStroke(ctx, u === "batik" ? "#5c1a20" : "#1b3f80", 1.2);
+    ctx.fillStyle = "#f3f1ec";
     for (let y = torsoTop + 10; y < torsoTop + 40; y += 8) {
       ctx.beginPath();
       ctx.arc(64, y, 1.1, 0, Math.PI * 2);
