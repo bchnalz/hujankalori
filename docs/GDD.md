@@ -87,15 +87,16 @@ play system (later passes).
 - **Uniforms** (`src/objects/CharacterSprite.ts`): the character is drawn
   procedurally in one of six RSUD uniforms — Bagian Umum, Dokter, Perawat OK
   (cap + mask; the face shows eyes only), Penunjang (navy, red sleeve piping),
-  Batik (black with a white corona-virus motif, maroon outline) and Korpri
+  Batik Corona (black with a white corona-virus motif, maroon outline) and Korpri
   (blue Korpri batik, gold pin on the left chest). Picked in a carousel popup
   from the menu (SERAGAM button), saved per device (`hk_uniform`).
 - **Share card** (`src/ui/ShareCard.ts`): on Game Over, BAGIKAN builds a 3:4
   image (1080×1440) — achievement chip, score, location, the character in
   uniform on that scene, initials, the food caught with counts (no
-  activities), QR + link — and opens the phone's share sheet with an
-  automatic persuasive caption (also copied to the clipboard); SIMPAN
-  downloads the image.
+  activities) and a call to action — and opens the phone's share sheet with
+  an automatic persuasive caption holding the link (also copied to the
+  clipboard); WHATSAPP opens WhatsApp with that caption, SIMPAN downloads
+  the image.
 - **Catch feed** (bottom): a rounded card per catch — big item icon in a
   glowing badge, the name, its type (AKTIVITAS / MAKANAN SEHAT / MAKANAN
   BERAT) and the calorie change, all in the type colour; the previous card

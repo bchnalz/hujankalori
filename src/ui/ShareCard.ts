@@ -1,5 +1,4 @@
 import Phaser from "phaser";
-import qrcode from "qrcode-generator";
 import { GAME_HEIGHT, GAME_WIDTH } from "../config/gameConfig";
 import { BACKDROP_LABEL, FONT_DISPLAY, FONT_UI, type BackdropChoice, type BackdropVariant } from "../config/theme";
 import { ITEMS } from "../config/itemConfig";
@@ -236,10 +235,11 @@ export function drawShareCard(scene: Phaser.Scene, d: CardData): HTMLCanvasEleme
     c.fillText(t, cx + 14 + bw / 2, cy + 50);
   });
 
-  // ---- footer: QR + call to action
-  const FY = H - 36 - 230;
-  rr(c, 36, FY, W - 72, 230, 36);
-  const fg = c.createLinearGradient(0, FY, 0, FY + 230);
+  // ---- footer: call to action (the link itself goes in the caption)
+  const FH = 200;
+  const FY = H - 36 - FH;
+  rr(c, 36, FY, W - 72, FH, 36);
+  const fg = c.createLinearGradient(0, FY, 0, FY + FH);
   fg.addColorStop(0, "rgba(18,26,52,0.95)");
   fg.addColorStop(1, "rgba(8,12,26,0.95)");
   c.fillStyle = fg;
@@ -247,37 +247,20 @@ export function drawShareCard(scene: Phaser.Scene, d: CardData): HTMLCanvasEleme
   c.lineWidth = 3;
   c.strokeStyle = "rgba(160,190,255,0.28)";
   c.stroke();
-  const qr = qrcode(0, "M");
-  qr.addData(gameUrl());
-  qr.make();
-  const n = qr.getModuleCount();
-  const QS = 186;
-  rr(c, 66, FY + 22, QS, QS, 18);
-  c.fillStyle = "#ffffff";
-  c.fill();
-  const cell = (QS - 20) / n;
-  c.fillStyle = "#0b1020";
-  for (let r = 0; r < n; r++) {
-    for (let k = 0; k < n; k++) {
-      if (qr.isDark(r, k)) c.fillRect(66 + 10 + k * cell, FY + 22 + 10 + r * cell, Math.ceil(cell), Math.ceil(cell));
-    }
-  }
-  c.textAlign = "left";
-  const tx = 66 + QS + 34;
+  c.textAlign = "center";
   c.save();
   c.shadowColor = "rgba(124,252,138,0.45)";
   c.shadowBlur = 22;
-  c.font = `400 60px ${FONT_DISPLAY}`;
+  c.font = `400 70px ${FONT_DISPLAY}`;
   c.fillStyle = "#7CFC8A";
-  c.fillText(d.rank?.rank === 1 || d.newRecord ? "Bisa kalahkan" : "Ayo tantang", tx, FY + 82);
-  c.fillText(d.rank?.rank === 1 || d.newRecord ? "rekorku?" : "skorku!", tx, FY + 142);
+  c.fillText(d.rank?.rank === 1 || d.newRecord ? "Bisa kalahkan rekorku?" : "Ayo tantang skorku!", W / 2, FY + 92);
   c.restore();
-  c.font = `800 26px ${FONT_UI}`;
+  c.font = `800 28px ${FONT_UI}`;
   c.fillStyle = "#e8f0ff";
-  c.fillText(gameUrl().replace(/^https?:\/\//, "").replace(/\/$/, ""), tx, FY + 186);
+  c.fillText(gameUrl().replace(/^https?:\/\//, "").replace(/\/$/, ""), W / 2, FY + 140);
   c.font = `700 22px ${FONT_UI}`;
   c.fillStyle = "#8ea0c4";
-  c.fillText("Main gratis · tanpa login · cukup buka di HP", tx, FY + 216);
+  c.fillText("Main gratis · tanpa login · cukup buka di HP", W / 2, FY + 174);
   return cv;
 }
 
@@ -347,16 +330,23 @@ export function openSharePreview(scene: Phaser.Scene, d: CardData): void {
   const im = scene.add.image(GAME_WIDTH / 2, 70 + PH / 2, key).setDisplaySize(PW, PH);
   const frame = scene.add.graphics();
   frame.lineStyle(4, 0xffffff, 0.25).strokeRoundedRect(GAME_WIDTH / 2 - PW / 2 - 2, 68, PW + 4, PH + 4, 12);
-  const note = scene.add
-    .text(GAME_WIDTH / 2, 70 + PH + 40, "Caption otomatis ikut terkirim & disalin", {
+  const capBox = scene.add.graphics();
+  const cap = scene.add
+    .text(GAME_WIDTH / 2, 70 + PH + 26, caption, {
       fontFamily: FONT_UI,
-      fontSize: "22px",
-      color: "#9fb0d0",
+      fontSize: "20px",
+      color: "#e8f0ff",
+      align: "left",
+      wordWrap: { width: PW + 60, useAdvancedWrap: true },
+      lineSpacing: 4,
     })
-    .setOrigin(0.5);
-  root.add([im, frame, note]);
+    .setOrigin(0.5, 0);
+  capBox.fillStyle(0x0e1630, 0.95).fillRoundedRect(GAME_WIDTH / 2 - (PW + 90) / 2, 70 + PH + 12, PW + 90, cap.height + 30, 16);
+  capBox.lineStyle(2, 0x25d366, 0.6).strokeRoundedRect(GAME_WIDTH / 2 - (PW + 90) / 2, 70 + PH + 12, PW + 90, cap.height + 30, 16);
+  const note = cap;
+  root.add([im, frame, capBox, note]);
   const status = scene.add
-    .text(GAME_WIDTH / 2, 70 + PH + 76, "", { fontFamily: FONT_UI, fontSize: "22px", color: "#7CFC8A", fontStyle: "bold" })
+    .text(GAME_WIDTH / 2, 70 + PH + cap.height + 62, "", { fontFamily: FONT_UI, fontSize: "22px", color: "#7CFC8A", fontStyle: "bold" })
     .setOrigin(0.5);
   root.add(status);
 
@@ -372,11 +362,11 @@ export function openSharePreview(scene: Phaser.Scene, d: CardData): void {
       },
     });
   };
-  const by = 70 + PH + 150;
+  const by = Math.min(GAME_HEIGHT - 70, 70 + PH + cap.height + 130);
   root.add(
     makeButton(
       scene,
-      GAME_WIDTH / 2 - 130,
+      140,
       by,
       "BAGIKAN",
       () => {
@@ -386,13 +376,27 @@ export function openSharePreview(scene: Phaser.Scene, d: CardData): void {
           else if (r === "shared") status.setText("Terima kasih sudah berbagi!");
         });
       },
-      { width: 320, height: 92, color: 0x25a35a },
+      { width: 240, height: 88, fontSize: 34, color: 0x25a35a },
     ),
   );
   root.add(
     makeButton(
       scene,
-      GAME_WIDTH / 2 + 180,
+      382,
+      by,
+      "WHATSAPP",
+      () => {
+        Sfx.click();
+        window.open(`https://wa.me/?text=${encodeURIComponent(caption)}`, "_blank");
+        status.setText("Membuka WhatsApp dengan caption & link");
+      },
+      { width: 220, height: 88, fontSize: 30, color: 0x1f8f4e },
+    ),
+  );
+  root.add(
+    makeButton(
+      scene,
+      596,
       by,
       "SIMPAN",
       () => {
@@ -402,7 +406,7 @@ export function openSharePreview(scene: Phaser.Scene, d: CardData): void {
           status.setText("Gambar disimpan");
         });
       },
-      { width: 220, height: 92, color: 0x37406b },
+      { width: 180, height: 88, fontSize: 32, color: 0x37406b },
     ),
   );
   const x = scene.add.container(GAME_WIDTH - 52, 52).setSize(72, 72).setInteractive({ useHandCursor: true });

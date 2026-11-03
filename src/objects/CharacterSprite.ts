@@ -17,7 +17,7 @@ export const UNIFORM_LABEL: Record<Uniform, string> = {
   dokter: "Dokter",
   ok: "Perawat OK",
   penunjang: "Penunjang",
-  batik: "Batik",
+  batik: "Batik Corona",
   korpri: "Korpri",
 };
 
