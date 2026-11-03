@@ -9,11 +9,11 @@ import type { Gender } from "../data/types";
  * drawn at `RES`× for crisp edges on high-DPI phones.
  */
 
-export type Uniform = "blud" | "asn" | "ok" | "penunjang" | "batik";
-export const UNIFORMS: Uniform[] = ["blud", "asn", "ok", "penunjang", "batik"];
+export type Uniform = "umum" | "dokter" | "ok" | "penunjang" | "batik";
+export const UNIFORMS: Uniform[] = ["umum", "dokter", "ok", "penunjang", "batik"];
 export const UNIFORM_LABEL: Record<Uniform, string> = {
-  blud: "BLUD",
-  asn: "ASN",
+  umum: "Bagian Umum",
+  dokter: "Dokter",
   ok: "Perawat OK",
   penunjang: "Penunjang",
   batik: "Batik",
@@ -38,8 +38,8 @@ interface Look {
 }
 
 const LOOKS: Record<Uniform, Look> = {
-  blud: { top: "#dcc196", topShade: "#c4a676", bottom: "#5b3e2b", bottomShade: "#47301f", collar: "#cfb283" },
-  asn: { top: "#d6bb8c", topShade: "#bfa16f", bottom: "#a7895c", bottomShade: "#8f7448", collar: "#c9ac7b" },
+  umum: { top: "#dcc196", topShade: "#c4a676", bottom: "#5b3e2b", bottomShade: "#47301f", collar: "#cfb283" },
+  dokter: { top: "#f7f9fc", topShade: "#d9e0ea", bottom: "#7d838d", bottomShade: "#646a73" },
   ok: { top: "#3a9c7c", topShade: "#2d7f64", bottom: "#3a9c7c", bottomShade: "#2d7f64" },
   penunjang: { top: "#24335f", topShade: "#1a2549", bottom: "#1f2c54", bottomShade: "#151e3d", collar: "#2f4078" },
   batik: { top: "#8a4b22", topShade: "#713b19", bottom: "#1f1f24", bottomShade: "#141418" },
@@ -195,7 +195,7 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
   ctx.restore();
 
   // uniform details
-  if (u === "blud" || u === "asn") {
+  if (u === "umum") {
     // shirt collar, button placket, chest pockets
     ctx.fillStyle = L.collar!;
     ctx.strokeStyle = INK;
@@ -226,18 +226,72 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
       ctx.lineWidth = 1;
       ctx.stroke();
     }
-    if (u === "asn") {
-      // shoulder straps
-      ctx.fillStyle = L.topShade;
-      for (const x of [41, 76]) {
-        rr(ctx, x, torsoTop + 1, 11, 4, 1.5);
-        ctx.fill();
-      }
-      // name tag
-      rr(ctx, 70, torsoTop + 7, 12, 3.5, 1);
-      ctx.fillStyle = "#1f2a44";
+  } else if (u === "dokter") {
+    // light-blue shirt and tie showing between the open lab-coat lapels
+    ctx.fillStyle = "#cfe3f7";
+    ctx.beginPath();
+    ctx.moveTo(57, torsoTop - 1);
+    ctx.lineTo(71, torsoTop - 1);
+    ctx.lineTo(66, torsoTop + 42);
+    ctx.lineTo(62, torsoTop + 42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#3f5f9e";
+    ctx.beginPath();
+    ctx.moveTo(62.5, torsoTop + 3);
+    ctx.lineTo(65.5, torsoTop + 3);
+    ctx.lineTo(66.5, torsoTop + 22);
+    ctx.lineTo(64, torsoTop + 26);
+    ctx.lineTo(61.5, torsoTop + 22);
+    ctx.closePath();
+    ctx.fill();
+    // lapels
+    ctx.fillStyle = "#eef2f8";
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(64 + sgn * 7, torsoTop - 1);
+      ctx.lineTo(64 + sgn * 15, torsoTop - 1);
+      ctx.lineTo(64 + sgn * 9, torsoTop + 16);
+      ctx.lineTo(64 + sgn * 3, torsoTop + 24);
+      ctx.closePath();
       ctx.fill();
+      ctx.stroke();
     }
+    // coat edges + pockets + pen
+    ctx.strokeStyle = "rgba(43,29,20,0.4)";
+    ctx.lineWidth = 1;
+    for (const x of [61, 67]) {
+      ctx.beginPath();
+      ctx.moveTo(x, torsoTop + 24);
+      ctx.lineTo(x, torsoTop + 42);
+      ctx.stroke();
+    }
+    rr(ctx, 44, torsoTop + 27, 12, 9, 2);
+    ctx.stroke();
+    rr(ctx, 72, torsoTop + 12, 11, 8, 2);
+    ctx.stroke();
+    ctx.fillStyle = "#2f6fd1";
+    ctx.fillRect(74, torsoTop + 8, 2, 6);
+    // stethoscope
+    ctx.strokeStyle = "#3a3f48";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(56, torsoTop + 1);
+    ctx.quadraticCurveTo(52, torsoTop + 18, 58, torsoTop + 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(72, torsoTop + 1);
+    ctx.quadraticCurveTo(76, torsoTop + 14, 74, torsoTop + 22);
+    ctx.stroke();
+    ctx.fillStyle = "#c9d1dc";
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(74, torsoTop + 24, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
   } else if (ok) {
     // scrub V-neck + chest pocket
     ctx.fillStyle = SKIN;
@@ -289,34 +343,14 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
     }
   }
 
-  // ASN: green badge on the character's right upper arm (viewer's left)
-  if (u === "asn") {
-    ctx.save();
-    ctx.translate(35, torsoTop + 12);
-    ctx.rotate((-swing * 2 * Math.PI) / 180);
-    ctx.beginPath();
-    ctx.moveTo(-4.5, -4);
-    ctx.lineTo(4.5, -4);
-    ctx.lineTo(4.5, 2);
-    ctx.lineTo(0, 6);
-    ctx.lineTo(-4.5, 2);
-    ctx.closePath();
-    fillStroke(ctx, "#2e9e4f", 1);
-    ctx.fillStyle = "#f5d36a";
-    ctx.beginPath();
-    ctx.arc(0, 0.5, 1.6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
   // ---- neck + head
   rr(ctx, 58, 52, 12, 9, 3);
   fillStroke(ctx, SKIN_SHADE, 1.2);
   ctx.beginPath();
   ctx.ellipse(64, 38, 22, 21, 0, 0, Math.PI * 2);
   fillStroke(ctx, SKIN, 1.8);
-  // ears
-  for (const x of [42, 86]) {
+  // ears (long hair covers them)
+  for (const x of female && !ok ? [] : [42, 86]) {
     ctx.beginPath();
     ctx.ellipse(x, 41, 3.2, 4.4, 0, 0, Math.PI * 2);
     fillStroke(ctx, SKIN, 1.2);
@@ -366,6 +400,16 @@ function drawFrame(ctx: CanvasRenderingContext2D, gender: Gender, u: Uniform, f:
       ctx.stroke();
     }
   } else if (female) {
+    // side locks in front of where the ears would be
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(64 + sgn * 18, 24);
+      ctx.quadraticCurveTo(64 + sgn * 26, 34, 64 + sgn * 24, 54);
+      ctx.quadraticCurveTo(64 + sgn * 21, 57, 64 + sgn * 18, 53);
+      ctx.quadraticCurveTo(64 + sgn * 20, 42, 64 + sgn * 16, 33);
+      ctx.closePath();
+      fillStroke(ctx, vgrad(ctx, 24, 56, "#4e2e1e", "#3a2113"), 1.6);
+    }
     // full fringe that sits high on the head (no "bald" forehead)
     ctx.beginPath();
     ctx.moveTo(41, 40);
