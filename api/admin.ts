@@ -5,6 +5,10 @@
  *
  *   GET  /api/admin?period=day|week|all&limit=200&q=AB
  *        -> { summary, period, entries, total, banned, log }
+ *   GET  /api/admin?view=insights&from=YYYY-MM-DD&to=YYYY-MM-DD
+ *        -> run statistics for that WIB date range (locations, play time,
+ *           how runs end, items caught, per-day series)
+ *   GET  /api/admin?view=export&type=runs|board&from=…&to=…   -> text/csv
  *   POST /api/admin { action: "login" }                       -> { ok }
  *   POST /api/admin { action: "delete", name, periods: [...] } -> { ok }
  *   POST /api/admin { action: "ban", name }                   -> { ok }  (also removes from all boards)
@@ -95,6 +99,164 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+const RUNS_KEY = "hk:runs";
+const MAX_RANGE_DAYS = 400;
+const EXPORT_MAX = 50000;
+
+/** WIB date range from the query (defaults: last 30 days), clamped. */
+function dateRange(req: Req): { from: string; to: string; days: string[]; fromMs: number; toMs: number } {
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  const today = wibDate();
+  let to = re.test(q(req, "to") ?? "") ? (q(req, "to") as string) : today;
+  if (to > today) to = today;
+  let from = re.test(q(req, "from") ?? "") ? (q(req, "from") as string) : wibDate(Date.now() - 29 * 86400000);
+  if (from > to) from = to;
+  const fromMs = Date.parse(`${from}T00:00:00+07:00`);
+  let toMs = Date.parse(`${to}T23:59:59.999+07:00`);
+  const span = Math.round((toMs - fromMs) / 86400000);
+  if (span > MAX_RANGE_DAYS) {
+    toMs = fromMs + MAX_RANGE_DAYS * 86400000 - 1;
+    to = wibDate(toMs);
+  }
+  const days: string[] = [];
+  for (let t = fromMs; t <= toMs; t += 86400000) days.push(wibDate(t));
+  return { from, to, days, fromMs, toMs };
+}
+
+/** HGETALL flat array -> object. */
+function hash(flat: unknown): Record<string, string> {
+  const a = (flat as string[]) ?? [];
+  const o: Record<string, string> = {};
+  for (let i = 0; i + 1 < a.length; i += 2) o[a[i]] = a[i + 1];
+  return o;
+}
+
+function addInto(target: Record<string, number>, src: Record<string, string>): void {
+  for (const [k, v] of Object.entries(src)) target[k] = (target[k] ?? 0) + (Number(v) || 0);
+}
+
+async function insights(req: Req): Promise<unknown> {
+  const { from, to, days } = dateRange(req);
+  const H = ["loc", "why", "ch", "g", "u", "items"];
+  const cmds: (string | number)[][] = [];
+  for (const d of days) {
+    cmds.push(["GET", `hk:stats:runs:${d}`], ["GET", `hk:stats:dur:${d}`], ["GET", `hk:stats:plays:${d}`], ["GET", `hk:stats:submits:${d}`]);
+    for (const h of H) cmds.push(["HGETALL", `hk:stats:${h}:${d}`]);
+  }
+  const out: unknown[] = [];
+  for (let i = 0; i < cmds.length; i += 600) out.push(...(await kv(cmds.slice(i, i + 600))));
+  const per = 4 + H.length;
+  const tot: Record<string, Record<string, number>> = Object.fromEntries(H.map((h) => [h, {}]));
+  let runs = 0;
+  let dur = 0;
+  let plays = 0;
+  let submits = 0;
+  const series = days.map((date, i) => {
+    const o = i * per;
+    const r = Number(out[o] ?? 0) || 0;
+    const du = Number(out[o + 1] ?? 0) || 0;
+    const p = Number(out[o + 2] ?? 0) || 0;
+    const s = Number(out[o + 3] ?? 0) || 0;
+    runs += r;
+    dur += du;
+    plays += p;
+    submits += s;
+    H.forEach((h, k) => addInto(tot[h], hash(out[o + 4 + k])));
+    return { date, runs: r, plays: p, submits: s, avgSec: r ? Math.round((du / r) * 10) / 10 : 0 };
+  });
+  const items = Object.entries(tot.items)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => ({ key, count }));
+  return {
+    from,
+    to,
+    runs,
+    plays,
+    submits,
+    avgSec: runs ? Math.round((dur / runs) * 10) / 10 : 0,
+    totalSec: Math.round(dur),
+    loc: tot.loc,
+    why: tot.why,
+    ch: tot.ch,
+    g: tot.g,
+    u: tot.u,
+    items,
+    series,
+  };
+}
+
+const csvCell = (v: unknown): string => {
+  const s = v === undefined || v === null ? "" : String(v);
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+/** Semicolon-separated with a BOM and decimal commas: opens cleanly in Excel (id-ID). */
+function toCsv(rows: unknown[][]): string {
+  return "\ufeff" + rows.map((r) => r.map(csvCell).join(";")).join("\r\n") + "\r\n";
+}
+const dec = (n: unknown): string => (n === "" || n === undefined || n === null ? "" : String(n).replace(".", ","));
+const LOC_NAME: Record<string, string> = { hospital: "IGD", morning: "GPT", garden: "Taman (versi 2015)", city: "Kota" };
+const ITEM_NAME: Record<string, string> = {
+  food_bakso: "Bakso", food_seblak: "Seblak", food_mie_goreng: "Mie Goreng", food_nasi_padang: "Nasi Padang",
+  food_donat: "Donat", food_es_teh: "Es Teh", healthy_pisang: "Pisang", healthy_alpukat: "Alpukat",
+  healthy_brokoli_rebus: "Brokoli Rebus", healthy_apel: "Apel", healthy_telur_rebus: "Telur Rebus",
+  healthy_wortel: "Wortel", healthy_air_mineral: "Air Mineral", activity_jogging_5: "Jogging 5 mnt",
+  activity_jogging_30: "Jogging 30 mnt", activity_angkat_beban_15: "Angkat Beban 15 mnt",
+  activity_yoga_30: "Yoga 30 mnt", activity_bersepeda_15: "Bersepeda 15 mnt", activity_bersepeda_45: "Bersepeda 45 mnt",
+};
+const WHY_NAME: Record<string, string> = { hp: "Kekenyangan", starve: "Kelaparan" };
+
+async function exportCsv(req: Req): Promise<{ name: string; body: string }> {
+  const { from, to, fromMs, toMs } = dateRange(req);
+  if (q(req, "type") === "board") {
+    const [flat] = await kv([["ZREVRANGE", "hk:v2:all", 0, EXPORT_MAX - 1, "WITHSCORES"]]);
+    const a = (flat as string[]) ?? [];
+    const rows: unknown[][] = [["Peringkat", "Inisial", "Skor terbaik (detik)"]];
+    for (let i = 0; i + 1 < a.length; i += 2) rows.push([i / 2 + 1, a[i], dec(Number(a[i + 1]) / 100)]);
+    return { name: `hujan-kalori-peringkat-${wibDate()}.csv`, body: toCsv(rows) };
+  }
+  const [sids] = await kv([["ZRANGEBYSCORE", RUNS_KEY, fromMs, toMs, "LIMIT", 0, EXPORT_MAX]]);
+  const list = (sids as string[]) ?? [];
+  const recs: Record<string, string>[] = [];
+  for (let i = 0; i < list.length; i += 500) {
+    const part = await kv(list.slice(i, i + 500).map((sid) => ["HGETALL", `hk:run:${sid}`]));
+    for (const h of part) {
+      const r = hash(h);
+      if (r.t) recs.push(r);
+    }
+  }
+  const rows: unknown[][] = [
+    ["Tanggal (WIB)", "Jam (WIB)", "Inisial", "Lama bermain (detik)", "Skor dikirim (detik)", "Berakhir karena", "Lokasi", "Cara pilih lokasi", "Gender", "Seragam", "Kalori dimakan", "Kalori dibakar", "Item ditangkap", "Rincian item"],
+  ];
+  for (const r of recs) {
+    const t = new Date(Number(r.t) + WIB_OFFSET_MS).toISOString();
+    let detail = "";
+    try {
+      detail = Object.entries(JSON.parse(r.items || "{}") as Record<string, number>)
+        .map(([k, n]) => `${ITEM_NAME[k] ?? k} x${n}`)
+        .join(", ");
+    } catch {
+      /* ignore */
+    }
+    rows.push([
+      t.slice(0, 10),
+      t.slice(11, 19),
+      r.name ?? "",
+      dec(r.sec),
+      dec(r.score ?? ""),
+      WHY_NAME[r.why] ?? r.why,
+      LOC_NAME[r.loc] ?? r.loc,
+      r.ch === "auto" ? "Otomatis" : "Dipilih",
+      r.g === "female" ? "Perempuan" : "Laki-laki",
+      r.u ?? "",
+      r.kin ?? "",
+      r.kout ?? "",
+      r.caught ?? "",
+      detail,
+    ]);
+  }
+  return { name: `hujan-kalori-riwayat-${from}_sd_${to}.csv`, body: toCsv(rows) };
+}
+
 const validName = (n: unknown): n is string => typeof n === "string" && /^[A-Z]{4}$/.test(n);
 
 export default async function handler(req: Req, res: Res): Promise<void> {
@@ -125,6 +287,20 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         ["INCR", failKey],
       ]);
       res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+
+    if (req.method === "GET" && q(req, "view") === "insights") {
+      res.status(200).json(await insights(req));
+      return;
+    }
+    if (req.method === "GET" && q(req, "view") === "export") {
+      const { name, body } = await exportCsv(req);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+      (res as unknown as { send?: (b: string) => void; end: (b?: string) => void }).send
+        ? (res as unknown as { send: (b: string) => void }).send(body)
+        : (res as unknown as { end: (b: string) => void }).end(body);
       return;
     }
 

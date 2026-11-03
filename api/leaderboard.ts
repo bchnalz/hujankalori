@@ -9,6 +9,8 @@
  *        -> { period, entries, total, me: {rank, score} | null }
  *   POST /api/leaderboard { action: "start" }           -> { sid }
  *   POST /api/leaderboard { name, score, sid }          -> SubmitResponse
+ *   POST /api/leaderboard { action: "end", sid, sec, why, loc, ch, g, u, kin, kout, items }
+ *        -> { ok }   (one record per finished run, for the admin statistics)
  *
  * Anti-cheat: every run must start a server session; the submitted survival
  * time can't exceed the real time elapsed since that session started.
@@ -65,6 +67,11 @@ const LOG_KEY = "hk:log";
 const LOG_KEEP = 500;
 // Play statistics (counted when a run starts / a score is submitted).
 const STATS_TTL = 400 * 86400; // keep daily counters ~13 months
+// Finished-run records (admin insights + CSV export).
+const RUNS_KEY = "hk:runs";
+const RUNS_KEEP = 50000;
+const LOCS = ["hospital", "morning", "garden", "city"];
+const WHYS = ["hp", "starve"];
 
 /** YYYY-MM-DD on the WIB calendar. */
 function wibDate(now = Date.now()): string {
@@ -242,6 +249,70 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         return;
       }
 
+      // ---- a run finished: store one anonymous record + daily aggregates
+      if (b.action === "end") {
+        const sid = String(b.sid ?? "");
+        if (!/^[a-z0-9]{8,32}$/.test(sid)) {
+          res.status(400).json({ error: "invalid_session" });
+          return;
+        }
+        const [started, fresh] = await kv([
+          ["GET", `hk:s:${sid}`],
+          ["SET", `hk:e:${sid}`, 1, "NX", "EX", SESSION_TTL],
+        ]);
+        if (started === null || started === undefined || fresh === null) {
+          // unknown session, or this run was already recorded
+          res.status(200).json({ ok: false });
+          return;
+        }
+        const realSec = (Date.now() - Number(started)) / 1000;
+        const sec = Math.round(Math.min(Math.max(Number(b.sec) || 0, 0), realSec + TOLERANCE_SEC, MAX_SCORE_SEC) * 10) / 10;
+        const pick = (v: unknown, list: string[], dflt: string): string => (list.includes(String(v)) ? String(v) : dflt);
+        const why = pick(b.why, WHYS, "hp");
+        const loc = pick(b.loc, LOCS, "hospital");
+        const ch = b.ch === "auto" ? "auto" : "pilih";
+        const g = b.g === "female" ? "female" : "male";
+        const u = typeof b.u === "string" && /^[a-z]{2,12}$/.test(b.u) ? b.u : "";
+        const kin = Math.min(Math.max(Math.round(Number(b.kin) || 0), 0), 100000);
+        const kout = Math.min(Math.max(Math.round(Number(b.kout) || 0), 0), 100000);
+        const items: Array<[string, number]> = [];
+        if (b.items && typeof b.items === "object") {
+          for (const [k, v] of Object.entries(b.items as Record<string, unknown>).slice(0, 40)) {
+            const n = Math.round(Number(v));
+            if (/^[a-z0-9_]{1,40}$/.test(k) && n > 0 && n <= 1000) items.push([k, n]);
+          }
+        }
+        const now = Date.now();
+        const day = wibDate(now);
+        const caught = items.reduce((a, [, n]) => a + n, 0);
+        const rk = `hk:run:${sid}`;
+        const cmds: (string | number)[][] = [
+          ["HSET", rk, "t", now, "sec", sec, "why", why, "loc", loc, "ch", ch, "g", g, "u", u, "kin", kin, "kout", kout, "caught", caught, "items", JSON.stringify(Object.fromEntries(items))],
+          ["EXPIRE", rk, STATS_TTL],
+          ["ZADD", RUNS_KEY, now, sid],
+          ["ZREMRANGEBYRANK", RUNS_KEY, 0, -(RUNS_KEEP + 1)],
+        ];
+        // aggregates: all time + per WIB day
+        for (const suffix of ["", `:${day}`]) {
+          const ex = (k: string): void => {
+            if (suffix) cmds.push(["EXPIRE", k, STATS_TTL]);
+          };
+          cmds.push(["INCR", `hk:stats:runs${suffix}`]);
+          ex(`hk:stats:runs${suffix}`);
+          cmds.push(["INCRBYFLOAT", `hk:stats:dur${suffix}`, sec]);
+          ex(`hk:stats:dur${suffix}`);
+          for (const [h, f] of [["loc", loc], ["why", why], ["ch", ch], ["g", g], ...(u ? [["u", u]] : [])] as Array<[string, string]>) {
+            cmds.push(["HINCRBY", `hk:stats:${h}${suffix}`, f, 1]);
+            ex(`hk:stats:${h}${suffix}`);
+          }
+          for (const [k, n] of items) cmds.push(["HINCRBY", `hk:stats:items${suffix}`, k, n]);
+          if (items.length) ex(`hk:stats:items${suffix}`);
+        }
+        await kv(cmds);
+        res.status(200).json({ ok: true });
+        return;
+      }
+
       // ---- submit a score
       const name = String(b.name ?? "").toUpperCase();
       const score = Number(b.score);
@@ -311,6 +382,8 @@ export default async function handler(req: Req, res: Res): Promise<void> {
       // Recent-submissions log for the admin panel (IP masked to /24).
       const log = JSON.stringify({ n: name, s: score, t: now, r: Math.round(realSec * 10) / 10, ip: maskIp(ip) });
       cmds.push(["LPUSH", LOG_KEY, log], ["LTRIM", LOG_KEY, 0, LOG_KEEP - 1]);
+      // attach the initials to this run's record (if the run was recorded)
+      cmds.push(["HSET", `hk:run:${sid}`, "name", name, "score", score], ["EXPIRE", `hk:run:${sid}`, STATS_TTL]);
       const day = wibDate(now);
       cmds.push(["INCR", "hk:stats:submits"], ["INCR", `hk:stats:submits:${day}`], ["EXPIRE", `hk:stats:submits:${day}`, STATS_TTL]);
       const out = await kv(cmds);
