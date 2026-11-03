@@ -16,7 +16,8 @@ import { addMuteToggle, roundButtonBg } from "../ui/MuteToggle";
 import type { ItemType } from "../config/itemConfig";
 import { Sfx } from "../audio/Sfx";
 import { makeButton } from "../ui/Button";
-import { startRun } from "../data/leaderboard";
+import { endRun, startRun } from "../data/leaderboard";
+import { getBackdropChoice } from "../data/prefs";
 import { runBriefing } from "../ui/Briefing";
 import { Fx } from "../ui/Fx";
 
@@ -54,6 +55,10 @@ export class GameScene extends Phaser.Scene {
   private warnBorder!: Phaser.GameObjects.Graphics;
   private weather!: WeatherFx;
   private combo = 0;
+  /** What was caught this run (for the admin statistics). */
+  private caught: Record<string, number> = {};
+  private kcalIn = 0;
+  private kcalOut = 0;
   private nextWarnBeep = 0;
   /** Pre-round popup is open (nothing moves). */
   private briefing = false;
@@ -88,6 +93,9 @@ export class GameScene extends Phaser.Scene {
     this.time.paused = false; // the clock persists across restarts (e.g. quit from pause)
     this.tweens.resumeAll();
     this.runSid = Promise.resolve(null);
+    this.caught = {};
+    this.kcalIn = 0;
+    this.kcalOut = 0;
     this.combo = 0;
     this.nextWarnBeep = 0;
     this.feed = [];
@@ -213,6 +221,9 @@ export class GameScene extends Phaser.Scene {
 
     const def = item.def;
     const delta = def.type === "activity" ? def.value : -def.value;
+    this.caught[def.key] = (this.caught[def.key] ?? 0) + 1;
+    if (def.type === "activity") this.kcalOut += def.value;
+    else this.kcalIn += def.value;
 
     this.applyHp(delta);
     if (def.type === "food") {
@@ -630,6 +641,22 @@ export class GameScene extends Phaser.Scene {
   private endGame(elapsed: number, reason: "hp" | "starve"): void {
     this.ended = true;
     this.physics.pause();
+    // Record the run for the admin statistics; the score submit waits for it.
+    const user = this.registry.get("user") as GameUser;
+    const report = {
+      sec: Math.round(elapsed * 10) / 10,
+      why: reason,
+      loc: (this.registry.get("__bd_variant") as string | undefined) ?? "hospital",
+      ch: getBackdropChoice() === "auto" ? ("auto" as const) : ("pilih" as const),
+      g: user?.gender ?? "male",
+      kin: this.kcalIn,
+      kout: this.kcalOut,
+      items: { ...this.caught },
+    };
+    const ended = this.runSid.then(async (sid) => {
+      if (sid) await endRun(sid, report);
+      return sid;
+    });
     Sfx.stopMusic(0.3);
     this.warnBorder.setVisible(false);
     // dramatic beat: flash, punch-in zoom on the player, defeated face
@@ -649,7 +676,7 @@ export class GameScene extends Phaser.Scene {
     cam.zoomTo(2, 650, "Cubic.easeOut");
     cam.pan(this.player.x, this.player.y - 60, 650, "Cubic.easeOut");
     this.time.delayedCall(1400, () => {
-      goTo(this, "GameOver", { survivalSeconds: elapsed, reason, sid: this.runSid });
+      goTo(this, "GameOver", { survivalSeconds: elapsed, reason, sid: ended });
     });
   }
 

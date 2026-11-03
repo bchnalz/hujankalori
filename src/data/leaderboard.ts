@@ -179,6 +179,31 @@ export async function startRun(): Promise<string | null> {
   }
 }
 
+export interface RunReport {
+  sec: number;
+  why: "hp" | "starve";
+  loc: string;
+  ch: "auto" | "pilih";
+  g: string;
+  u?: string;
+  kin: number;
+  kout: number;
+  items: Record<string, number>;
+}
+
+/** Anonymous end-of-run record for the admin statistics (best effort). */
+export async function endRun(sid: string, report: RunReport): Promise<void> {
+  try {
+    await api<{ ok: boolean }>({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "end", sid, ...report }),
+    });
+  } catch {
+    /* offline / not deployed: skip */
+  }
+}
+
 export async function fetchBoard(period: Period, limit = 15, name = getSavedInitials()): Promise<BoardResult> {
   const nameQ = /^[A-Z]{4}$/.test(name) ? `&name=${name}` : "";
   try {
