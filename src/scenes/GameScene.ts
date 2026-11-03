@@ -677,7 +677,7 @@ export class GameScene extends Phaser.Scene {
     cam.zoomTo(2, 650, "Cubic.easeOut");
     cam.pan(this.player.x, this.player.y - 60, 650, "Cubic.easeOut");
     this.time.delayedCall(1400, () => {
-      goTo(this, "GameOver", { survivalSeconds: elapsed, reason, sid: ended });
+      goTo(this, "GameOver", { survivalSeconds: elapsed, reason, sid: ended, caught: { ...this.caught } });
     });
   }
 

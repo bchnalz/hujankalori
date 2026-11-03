@@ -11,4 +11,6 @@ export interface SessionResult {
   reason?: "hp" | "starve";
   /** Server run-session id (null when offline). */
   sid?: Promise<string | null>;
+  /** item key -> times caught this run (for the share card). */
+  caught?: Record<string, number>;
 }
